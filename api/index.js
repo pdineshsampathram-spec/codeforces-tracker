@@ -3,6 +3,7 @@ import cors from 'cors';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { db } from './db.js';
+import { generateAiDiagnostics, askAiAssistant } from './ai.js';
 
 dotenv.config();
 
@@ -177,6 +178,30 @@ app.get('/api/synclog/:handle', async (req, res) => {
   const { handle } = req.params;
   const logs = db.getSyncLog(handle);
   return res.json({ success: true, data: logs });
+});
+
+// 3b. Real AI Diagnostics Endpoint (Powered by Nvidia Llama 3.3 70B)
+app.post('/api/ai/insights', async (req, res) => {
+  try {
+    const { handle, submissions = [] } = req.body;
+    if (!handle) return res.status(400).json({ success: false, error: 'Handle required' });
+    const result = await generateAiDiagnostics(handle, submissions);
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3c. Natural Language Practice Assistant Chat Endpoint
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { handle, submissions = [], question } = req.body;
+    if (!question) return res.status(400).json({ success: false, error: 'Question required' });
+    const answer = await askAiAssistant(handle, submissions, question);
+    return res.json({ success: true, answer });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 4. Upcoming Contests Endpoint

@@ -1,62 +1,111 @@
-import React from 'react';
-import { Sparkles, TrendingUp, Zap, Target, AlertTriangle, Lightbulb, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, TrendingUp, Zap, Target, AlertTriangle, Lightbulb, CheckCircle2, RefreshCw, Send, Bot, User } from 'lucide-react';
 
 export default function InsightsView({ submissions, user }) {
-  const totalSubmissions = submissions.length;
-  const okSubmissions = submissions.filter(s => s.verdict === 'OK');
-  const passRate = totalSubmissions > 0 ? ((okSubmissions.length / totalSubmissions) * 100).toFixed(1) : 0;
+  const [aiData, setAiData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [chatQuestion, setChatQuestion] = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
-  // Calculate tag performance
-  const tagCounts = {};
-  okSubmissions.forEach(sub => {
-    if (sub.problem && sub.problem.tags) {
-      sub.problem.tags.forEach(t => {
-        tagCounts[t] = (tagCounts[t] || 0) + 1;
+  const userHandle = user ? user.handle : 'pdineshsampathram';
+
+  const fetchAiInsights = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ai/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handle: userHandle, submissions }),
       });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setAiData(json.data);
+      }
+    } catch (err) {
+      console.error('AI Insights Error:', err);
+    } finally {
+      setLoading(false);
     }
-  });
+  };
 
-  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
-  const topTag = sortedTags.length > 0 ? sortedTags[0][0] : 'Greedy & Math';
-  const secondTag = sortedTags.length > 1 ? sortedTags[1][0] : 'Implementation';
+  useEffect(() => {
+    fetchAiInsights();
+  }, [userHandle]);
 
-  // Calculate rating stats
-  const okRatings = okSubmissions.map(s => s.problem?.rating).filter(Boolean);
-  const maxRatingSolved = okRatings.length > 0 ? Math.max(...okRatings) : 800;
-  const avgRatingSolved = okRatings.length > 0 ? Math.round(okRatings.reduce((a, b) => a + b, 0) / okRatings.length) : 800;
-  const recommendedNextRating = Math.min(2400, Math.max(800, maxRatingSolved + 100));
+  const handleSendQuestion = async (e) => {
+    e.preventDefault();
+    if (!chatQuestion.trim() || chatLoading) return;
+
+    const q = chatQuestion.trim();
+    setChatQuestion('');
+    setChatHistory(prev => [...prev, { role: 'user', content: q }]);
+    setChatLoading(true);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handle: userHandle, submissions, question: q }),
+      });
+      const json = await res.json();
+      if (json.success && json.answer) {
+        setChatHistory(prev => [...prev, { role: 'assistant', content: json.answer }]);
+      }
+    } catch (err) {
+      setChatHistory(prev => [...prev, { role: 'assistant', content: 'Apologies, I could not generate a response right now. Please try again.' }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const totalSubmissions = submissions.length;
+  const okSubmissions = submissions.filter(s => s.verdict === 'OK' || s.verdict === 'Accepted');
+  const passRate = totalSubmissions > 0 ? ((okSubmissions.length / totalSubmissions) * 100).toFixed(1) : 0;
 
   return (
     <div>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <Sparkles size={22} style={{ color: 'var(--accent-purple)' }} />
-          AI Performance Diagnostics & Skill Insights
-        </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
-          Automated data insights and practice recommendations based on your submission patterns.
-        </p>
+      <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Sparkles size={22} style={{ color: 'var(--accent-purple)' }} />
+            AI Performance Diagnostics & Skill Insights
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
+            Live LLM analysis powered by Nvidia Llama 3.3 70B & your real Codeforces telemetry.
+          </p>
+        </div>
+
+        <button
+          className="btn-secondary-sm"
+          onClick={fetchAiInsights}
+          disabled={loading}
+        >
+          <RefreshCw size={13} className={loading ? 'spinner' : ''} />
+          <span>{loading ? 'Analyzing...' : 'Regenerate AI Diagnostics'}</span>
+        </button>
       </div>
 
+      {/* KPI Insight Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
-        {/* Insight Card 1 */}
+        {/* Card 1 */}
         <div className="ent-card" style={{ borderLeft: '3px solid var(--accent-purple)' }}>
           <div className="kpi-header">
             <span className="kpi-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Zap size={14} style={{ color: 'var(--accent-purple)' }} />
-              TOP STRENGTH TOPIC
+              TOP STRENGTH TOPICS
             </span>
             <span className="status-badge done">Strongest</span>
           </div>
-          <div className="kpi-value" style={{ fontSize: '1.4rem', color: 'var(--accent-purple)' }}>
-            {topTag.toUpperCase()} & {secondTag.toUpperCase()}
+          <div className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-purple)', textTransform: 'uppercase' }}>
+            {aiData ? aiData.strongestTopics : 'Math & Greedy'}
           </div>
           <div className="kpi-subtext">
-            You solve <strong>{topTag}</strong> problems with your highest first-attempt success rate.
+            Highest first-attempt success rate based on historical submissions.
           </div>
         </div>
 
-        {/* Insight Card 2 */}
+        {/* Card 2 */}
         <div className="ent-card" style={{ borderLeft: '3px solid var(--accent-green)' }}>
           <div className="kpi-header">
             <span className="kpi-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -65,15 +114,15 @@ export default function InsightsView({ submissions, user }) {
             </span>
             <span className="status-badge done">Target</span>
           </div>
-          <div className="kpi-value" style={{ fontSize: '1.4rem', color: 'var(--accent-green)' }}>
-            ★ {recommendedNextRating} Rating
+          <div className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-green)' }}>
+            ★ {aiData ? aiData.nextTargetRating : 1300} Rating
           </div>
           <div className="kpi-subtext">
-            Based on your average solved difficulty of <strong>{avgRatingSolved}</strong>, target <strong>{recommendedNextRating}</strong> problems to maximize rating growth.
+            Data-backed problem difficulty target to maximize rating growth.
           </div>
         </div>
 
-        {/* Insight Card 3 */}
+        {/* Card 3 */}
         <div className="ent-card" style={{ borderLeft: '3px solid var(--accent-blue)' }}>
           <div className="kpi-header">
             <span className="kpi-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -84,55 +133,146 @@ export default function InsightsView({ submissions, user }) {
               {passRate}% AC
             </span>
           </div>
-          <div className="kpi-value" style={{ fontSize: '1.4rem', color: 'var(--text-main)' }}>
+          <div className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--text-main)' }}>
             {okSubmissions.length} of {totalSubmissions} AC
           </div>
           <div className="kpi-subtext">
-            Your accepted solution ratio is stable across practice sets.
+            {aiData ? aiData.passRateSummary : 'Your accepted solution ratio is stable across sets.'}
           </div>
         </div>
       </div>
 
-      {/* Structured Insights List */}
-      <div className="ent-card">
+      {/* Diagnostic Summary */}
+      <div className="ent-card" style={{ marginBottom: '1.5rem' }}>
         <div className="ent-card-header">
           <h3 className="ent-card-title">
             <Lightbulb size={18} style={{ color: 'var(--accent-amber)' }} />
-            Automated Diagnostic Summary
+            Live AI Diagnostic Summary
           </h3>
+          <span style={{ fontSize: '0.725rem', color: 'var(--text-subtle)' }}>
+            Model: Nvidia Llama 3.3 70B Instruct
+          </span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)', display: 'flex', gap: '0.85rem' }}>
-            <CheckCircle2 size={20} style={{ color: 'var(--accent-green)', flexShrink: 0, marginTop: '0.1rem' }} />
-            <div>
-              <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>High Efficiency in Core Problem Types</h4>
-              <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
-                Your data shows high speed and accuracy when solving <strong>{topTag}</strong> and <strong>{secondTag}</strong> problems. You consistently achieve AC within 1-2 submissions on problems rated up to <strong>{maxRatingSolved}</strong>.
-              </p>
-            </div>
+        {loading ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <div className="spinner" style={{ margin: '0 auto 0.75rem', width: '20px', height: '20px', border: '2px solid var(--border-subtle)', borderTopColor: 'var(--accent-purple)', borderRadius: '50%' }} />
+            Analyzing real solve telemetry...
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {(aiData?.diagnosticSummary || []).map((item, idx) => (
+              <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)', display: 'flex', gap: '0.85rem' }}>
+                <CheckCircle2 size={18} style={{ color: idx === 0 ? 'var(--accent-green)' : idx === 1 ? 'var(--accent-blue)' : 'var(--accent-orange)', flexShrink: 0, marginTop: '0.1rem' }} />
+                <div>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>{item.title}</h4>
+                  <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                    {item.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recommended 7-Day Practice Plan */}
+      {aiData?.recommendedPlan && (
+        <div className="ent-card" style={{ marginBottom: '1.5rem' }}>
+          <div className="ent-card-header">
+            <h3 className="ent-card-title">
+              <Target size={18} style={{ color: 'var(--accent-green)' }} />
+              AI Recommended Weekly Practice Schedule
+            </h3>
           </div>
 
-          <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)', display: 'flex', gap: '0.85rem' }}>
-            <TrendingUp size={20} style={{ color: 'var(--accent-blue)', flexShrink: 0, marginTop: '0.1rem' }} />
-            <div>
-              <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>Optimal Practice Difficulty Range</h4>
-              <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
-                Your peak performance zone is currently in the <strong>{Math.max(800, avgRatingSolved - 100)} - {recommendedNextRating}</strong> rating bracket. Solving 3-5 problems in this bracket daily will build contest confidence.
-              </p>
-            </div>
-          </div>
-
-          <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)', display: 'flex', gap: '0.85rem' }}>
-            <AlertTriangle size={20} style={{ color: 'var(--accent-orange)', flexShrink: 0, marginTop: '0.1rem' }} />
-            <div>
-              <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>Topic Expansion Opportunity</h4>
-              <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
-                Consider practicing more <strong>Dynamic Programming (dp)</strong> and <strong>Data Structures (trees, Segment Trees)</strong> problems to prepare for higher Div 3 and Div 2 contests.
-              </p>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+            {aiData.recommendedPlan.map((plan, i) => (
+              <div key={i} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
+                <span className="status-badge done" style={{ fontSize: '0.675rem', marginBottom: '0.5rem' }}>{plan.day}</span>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', margin: '0.3rem 0 0.2rem' }}>{plan.focus}</h4>
+                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>{plan.detail}</p>
+              </div>
+            ))}
           </div>
         </div>
+      )}
+
+      {/* Interactive Natural Language Practice Assistant Chat */}
+      <div className="ent-card">
+        <div className="ent-card-header">
+          <h3 className="ent-card-title">
+            <Bot size={18} style={{ color: 'var(--accent-blue)' }} />
+            Ask CP AI Assistant
+          </h3>
+          <span style={{ fontSize: '0.725rem', color: 'var(--text-subtle)' }}>
+            Ask anything about your practice strategy or weak topics
+          </span>
+        </div>
+
+        {/* Chat History */}
+        {chatHistory.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem', maxHeight: '300px', overflowY: 'auto', padding: '0.5rem' }}>
+            {chatHistory.map((msg, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  gap: '0.6rem',
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  maxWidth: '85%',
+                }}
+              >
+                {msg.role === 'assistant' && (
+                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--accent-blue-subtle)', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Bot size={14} style={{ color: 'var(--accent-blue)' }} />
+                  </div>
+                )}
+                <div
+                  style={{
+                    background: msg.role === 'user' ? 'var(--accent-blue)' : 'var(--bg-input)',
+                    color: msg.role === 'user' ? '#fff' : 'var(--text-main)',
+                    padding: '0.6rem 0.85rem',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.825rem',
+                    lineHeight: '1.6',
+                    border: msg.role === 'user' ? 'none' : '1px solid var(--border-subtle)',
+                  }}
+                >
+                  {msg.content}
+                </div>
+                {msg.role === 'user' && (
+                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <User size={14} style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Form Input */}
+        <form onSubmit={handleSendQuestion} style={{ display: 'flex', gap: '0.5rem' }}>
+          <input
+            type="text"
+            className="cmd-input"
+            placeholder="e.g. What topics should I practice before my next Div 2 contest?"
+            value={chatQuestion}
+            onChange={(e) => setChatQuestion(e.target.value)}
+            style={{
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.55rem 0.85rem',
+              fontSize: '0.85rem',
+              flex: 1,
+            }}
+          />
+          <button type="submit" className="btn-primary-sm" disabled={chatLoading || !chatQuestion.trim()}>
+            {chatLoading ? <RefreshCw size={13} className="spinner" /> : <Send size={13} />}
+            <span>Ask</span>
+          </button>
+        </form>
       </div>
     </div>
   );
