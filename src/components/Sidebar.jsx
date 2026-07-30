@@ -31,6 +31,7 @@ export default function Sidebar({ activePage, onSelectPage, user, focusModeActiv
   ];
 
   const workspaceNav = [
+    { id: 'cohorts', label: 'Cohorts & Teams', icon: Users2 },
     { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
     { id: 'notes', label: 'Notes', icon: StickyNote },
   ];

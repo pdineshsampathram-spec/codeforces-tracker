@@ -5,7 +5,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// In Vercel serverless /tmp or local project directory
 const DATA_DIR = process.env.VERCEL ? '/tmp/.data' : path.join(__dirname, '../.data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
@@ -24,6 +23,7 @@ function loadDb() {
           {
             id: 'u_default',
             email: 'default@codeforcespro.app',
+            name: 'Default User',
             created_at: new Date().toISOString(),
           }
         ],
@@ -35,6 +35,36 @@ function loadDb() {
             created_at: new Date().toISOString(),
           }
         ],
+        cohorts: [
+          {
+            id: 'c_global',
+            name: 'Global Div 2 & 3 Study Group',
+            code: 'CFPRO2026',
+            description: 'Public competitive programming practice group for daily problem solving.',
+            owner_user_id: 'u_default',
+            created_at: new Date().toISOString(),
+          }
+        ],
+        cohort_members: [
+          {
+            id: 'cm_1',
+            cohort_id: 'c_global',
+            handle: 'pdineshsampathram',
+            joined_at: new Date().toISOString(),
+          },
+          {
+            id: 'cm_2',
+            cohort_id: 'c_global',
+            handle: 'tourist',
+            joined_at: new Date().toISOString(),
+          },
+          {
+            id: 'cm_3',
+            cohort_id: 'c_global',
+            handle: 'Benq',
+            joined_at: new Date().toISOString(),
+          }
+        ],
         submission_snapshots: {},
         sync_log: [],
       };
@@ -42,12 +72,17 @@ function loadDb() {
       return initialSchema;
     }
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed.cohorts) parsed.cohorts = [];
+    if (!parsed.cohort_members) parsed.cohort_members = [];
+    return parsed;
   } catch (err) {
     console.error('Error loading DB file:', err);
     return {
       users: [],
       linked_handles: [],
+      cohorts: [],
+      cohort_members: [],
       submission_snapshots: {},
       sync_log: [],
     };
@@ -63,36 +98,107 @@ function saveDb(data) {
   }
 }
 
-// Public DB API
 export const db = {
   // 1. Users & Linked Handles
   getUsers() {
-    const data = loadDb();
-    return data.users || [];
+    return loadDb().users || [];
   },
 
-  getLinkedHandles() {
+  createUser(email, name = 'CP Developer') {
     const data = loadDb();
+    const existing = data.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (existing) return existing;
+
+    const newUser = {
+      id: `u_${Date.now()}`,
+      email: email.trim(),
+      name: name.trim(),
+      created_at: new Date().toISOString(),
+    };
+    data.users.push(newUser);
+    saveDb(data);
+    return newUser;
+  },
+
+  getLinkedHandles(userId = null) {
+    const data = loadDb();
+    if (userId) {
+      return data.linked_handles.filter(lh => lh.user_id === userId);
+    }
     return data.linked_handles || [];
   },
 
   linkHandle(handle, userId = 'u_default') {
     const data = loadDb();
-    const cleanHandle = handle.trim().toLowerCase();
-    const existing = data.linked_handles.find(lh => lh.handle.toLowerCase() === cleanHandle);
+    const cleanHandle = handle.trim();
+    const existing = data.linked_handles.find(lh => lh.handle.toLowerCase() === cleanHandle.toLowerCase() && lh.user_id === userId);
     if (!existing) {
-      data.linked_handles.push({
+      const entry = {
         id: `lh_${Date.now()}`,
         user_id: userId,
-        handle: handle.trim(),
+        handle: cleanHandle,
         created_at: new Date().toISOString(),
-      });
+      };
+      data.linked_handles.push(entry);
       saveDb(data);
+      return entry;
     }
+    return existing;
+  },
+
+  removeLinkedHandle(handle, userId = 'u_default') {
+    const data = loadDb();
+    data.linked_handles = data.linked_handles.filter(lh => !(lh.handle.toLowerCase() === handle.toLowerCase() && lh.user_id === userId));
+    saveDb(data);
     return data.linked_handles;
   },
 
-  // 2. Submission Snapshots (Upsert)
+  // 2. Cohorts & Teams
+  getCohorts() {
+    return loadDb().cohorts || [];
+  },
+
+  createCohort(name, description = '', ownerUserId = 'u_default') {
+    const data = loadDb();
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const newCohort = {
+      id: `c_${Date.now()}`,
+      name: name.trim(),
+      code,
+      description: description.trim(),
+      owner_user_id: ownerUserId,
+      created_at: new Date().toISOString(),
+    };
+    data.cohorts.push(newCohort);
+    saveDb(data);
+    return newCohort;
+  },
+
+  joinCohort(code, handle) {
+    const data = loadDb();
+    const cohort = data.cohorts.find(c => c.code.toLowerCase() === code.trim().toLowerCase());
+    if (!cohort) throw new Error('Invalid cohort code');
+
+    const cleanHandle = handle.trim();
+    const existing = data.cohort_members.find(cm => cm.cohort_id === cohort.id && cm.handle.toLowerCase() === cleanHandle.toLowerCase());
+    if (!existing) {
+      data.cohort_members.push({
+        id: `cm_${Date.now()}`,
+        cohort_id: cohort.id,
+        handle: cleanHandle,
+        joined_at: new Date().toISOString(),
+      });
+      saveDb(data);
+    }
+    return cohort;
+  },
+
+  getCohortMembers(cohortId) {
+    const data = loadDb();
+    return data.cohort_members.filter(cm => cm.cohort_id === cohortId);
+  },
+
+  // 3. Submission Snapshots
   upsertSubmissions(handle, submissions) {
     const data = loadDb();
     const hKey = handle.toLowerCase();
@@ -138,7 +244,6 @@ export const db = {
     return Object.values(map).sort((a, b) => b.creation_time_seconds - a.creation_time_seconds);
   },
 
-  // 3. Historical Trends Query
   getHistoricalTrends(handle, days = 30) {
     const subs = this.getStoredSubmissions(handle);
     const nowSec = Math.floor(Date.now() / 1000);
@@ -146,7 +251,6 @@ export const db = {
 
     const filtered = subs.filter(s => (nowSec - s.creation_time_seconds) <= limitSec);
 
-    // Aggregate by day
     const dailyMap = new Map();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -187,7 +291,6 @@ export const db = {
     };
   },
 
-  // 4. Sync Log
   recordSyncLog(handle, status, submissionsCount = 0, errorMessage = null) {
     const data = loadDb();
     if (!data.sync_log) data.sync_log = [];
@@ -195,14 +298,13 @@ export const db = {
     const entry = {
       id: `log_${Date.now()}`,
       handle,
-      status, // 'SUCCESS' | 'FAILED'
+      status,
       submissions_count: submissionsCount,
       error_message: errorMessage,
       synced_at: new Date().toISOString(),
     };
 
     data.sync_log.unshift(entry);
-    // Keep last 100 log entries
     data.sync_log = data.sync_log.slice(0, 100);
     saveDb(data);
 

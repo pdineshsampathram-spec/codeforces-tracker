@@ -18,6 +18,7 @@ import CompareView from './components/CompareView';
 import ProgressView from './components/ProgressView';
 import BookmarksView from './components/BookmarksView';
 import NotesView from './components/NotesView';
+import CohortsView from './components/CohortsView';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { AlertCircle } from 'lucide-react';
 
@@ -130,6 +131,7 @@ function AppContent() {
       case 'progress': return 'Goals, Streaks & Achievements';
       case 'bookmarks': return 'Problem Bookmarks';
       case 'notes': return 'Problem Notes';
+      case 'cohorts': return 'Cohorts & Teams';
       default: return 'Dashboard';
     }
   };
@@ -265,6 +267,11 @@ function AppContent() {
               {/* PAGE 10: NOTES */}
               {activePage === 'notes' && (
                 <NotesView />
+              )}
+
+              {/* PAGE 11: COHORTS & TEAMS */}
+              {activePage === 'cohorts' && (
+                <CohortsView activeHandle={handle} />
               )}
             </div>
           ) : null}

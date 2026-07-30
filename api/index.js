@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { db } from './db.js';
 import { generateAiDiagnostics, askAiAssistant } from './ai.js';
+import { setupAuthAndCohortRoutes } from './auth.js';
 
 dotenv.config();
 
@@ -11,6 +12,9 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Register Auth & Cohorts endpoints
+setupAuthAndCohortRoutes(app);
 
 // Server Response Cache (10 min TTL)
 const cache = new Map();
