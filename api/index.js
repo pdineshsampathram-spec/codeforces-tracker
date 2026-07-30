@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { db } from './db.js';
 
 dotenv.config();
 
@@ -10,9 +11,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// In-memory cache
+// Server Response Cache (10 min TTL)
 const cache = new Map();
-const CACHE_TTL = 15000; // 15 seconds
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 function getCached(key) {
   const cached = cache.get(key);
@@ -37,7 +38,6 @@ function generateApiSig(methodName, params, apiKey, secret) {
     ['time', timeSec]
   ];
 
-  // Sort lexicographically by key, then value
   allParams.sort((a, b) => {
     if (a[0] === b[0]) return a[1].localeCompare(b[1]);
     return a[0].localeCompare(b[0]);
@@ -66,7 +66,7 @@ async function fetchFromCodeforces(methodName, params = [], authorized = false) 
   }
 
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'Codeforces-Tracker-App/1.0' }
+    headers: { 'User-Agent': 'Codeforces-Tracker-App/2.0' }
   });
 
   if (!response.ok) {
@@ -82,15 +82,18 @@ async function fetchFromCodeforces(methodName, params = [], authorized = false) 
   return json.result;
 }
 
-// API Routes
+// 1. User Full Data Endpoint (with DB fallback & upsert)
 app.get('/api/user/:handle', async (req, res) => {
   const { handle } = req.params;
   const cacheKey = `user_full_${handle.toLowerCase()}`;
   const cachedData = getCached(cacheKey);
 
   if (cachedData) {
-    return res.json({ success: true, data: cachedData, cached: true });
+    return res.json({ success: true, data: cachedData, cached: true, source: 'cache' });
   }
+
+  // Link handle to DB
+  db.linkHandle(handle);
 
   try {
     const [userInfoList, ratingHistory, submissions] = await Promise.all([
@@ -101,23 +104,82 @@ app.get('/api/user/:handle', async (req, res) => {
 
     const userInfo = userInfoList && userInfoList.length > 0 ? userInfoList[0] : null;
     if (!userInfo) {
-      return res.status(404).json({ success: false, error: 'User not found' });
+      return res.status(404).json({ success: false, error: 'User not found on Codeforces' });
+    }
+
+    // Upsert into persistent submission_snapshots DB table
+    let newUpserted = 0;
+    if (submissions && submissions.length > 0) {
+      newUpserted = db.upsertSubmissions(handle, submissions);
+      db.recordSyncLog(handle, 'SUCCESS', submissions.length);
     }
 
     const payload = {
       user: userInfo,
       ratingHistory,
-      submissions
+      submissions,
+      upsertedCount: newUpserted,
     };
 
     setCache(cacheKey, payload);
-    return res.json({ success: true, data: payload, cached: false });
+    return res.json({ success: true, data: payload, cached: false, source: 'api+db' });
   } catch (error) {
-    console.error('API Error:', error.message);
+    console.error('API Pull Error, checking DB fallback:', error.message);
+    
+    // Fallback to DB stored submission snapshots if live API fails
+    const storedSubs = db.getStoredSubmissions(handle);
+    if (storedSubs && storedSubs.length > 0) {
+      db.recordSyncLog(handle, 'FAILED', storedSubs.length, error.message);
+
+      const fallbackPayload = {
+        user: {
+          handle: handle,
+          rank: 'Active CP Solver',
+          rating: 1200,
+          maxRating: 1200,
+          avatar: 'https://userpic.codeforces.org/no-avatar.jpg',
+        },
+        ratingHistory: [],
+        submissions: storedSubs.map(s => ({
+          id: s.submission_id,
+          verdict: s.verdict,
+          programmingLanguage: s.programming_language,
+          creationTimeSeconds: s.creation_time_seconds,
+          problem: {
+            contestId: s.contest_id,
+            index: s.problem_index,
+            name: s.problem_name,
+            rating: s.problem_rating,
+            tags: s.problem_tags,
+          }
+        })),
+        isFallback: true,
+      };
+
+      return res.json({ success: true, data: fallbackPayload, cached: false, source: 'db_fallback' });
+    }
+
+    db.recordSyncLog(handle, 'FAILED', 0, error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
 
+// 2. Historical Trend Endpoint (Powered by stored DB snapshots)
+app.get('/api/history/:handle', async (req, res) => {
+  const { handle } = req.params;
+  const days = parseInt(req.query.days) || 30;
+  const trendData = db.getHistoricalTrends(handle, days);
+  return res.json({ success: true, data: trendData });
+});
+
+// 3. Sync Log Endpoint
+app.get('/api/synclog/:handle', async (req, res) => {
+  const { handle } = req.params;
+  const logs = db.getSyncLog(handle);
+  return res.json({ success: true, data: logs });
+});
+
+// 4. Upcoming Contests Endpoint
 app.get('/api/contests', async (req, res) => {
   const cacheKey = 'contests_upcoming';
   const cachedData = getCached(cacheKey);
@@ -135,6 +197,7 @@ app.get('/api/contests', async (req, res) => {
   }
 });
 
+// 5. Status Check Endpoint
 app.get('/api/status-check', async (req, res) => {
   try {
     if (process.env.CF_API_KEY && process.env.CF_API_SECRET) {
@@ -145,6 +208,28 @@ app.get('/api/status-check', async (req, res) => {
   } catch (error) {
     return res.json({ success: false, authenticated: false, error: error.message });
   }
+});
+
+// 6. Automated Cron Sync Endpoint (Vercel Cron / Daily background sync)
+app.get('/api/cron/sync', async (req, res) => {
+  const handles = db.getLinkedHandles();
+  const results = [];
+
+  for (const lh of handles) {
+    try {
+      const submissions = await fetchFromCodeforces('user.status', [['handle', lh.handle], ['from', '1'], ['count', '500']]);
+      if (submissions && submissions.length > 0) {
+        const count = db.upsertSubmissions(lh.handle, submissions);
+        db.recordSyncLog(lh.handle, 'SUCCESS', submissions.length);
+        results.push({ handle: lh.handle, status: 'synced', newSubmissions: count });
+      }
+    } catch (err) {
+      db.recordSyncLog(lh.handle, 'FAILED', 0, err.message);
+      results.push({ handle: lh.handle, status: 'failed', error: err.message });
+    }
+  }
+
+  return res.json({ success: true, timestamp: new Date().toISOString(), syncedHandles: results });
 });
 
 export default app;
