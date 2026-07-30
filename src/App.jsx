@@ -19,8 +19,6 @@ import ProgressView from './components/ProgressView';
 import BookmarksView from './components/BookmarksView';
 import NotesView from './components/NotesView';
 import CohortsView from './components/CohortsView';
-import BillingView from './components/BillingView';
-import LandingPage from './components/LandingPage';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { AlertCircle } from 'lucide-react';
 
@@ -134,7 +132,6 @@ function AppContent() {
       case 'bookmarks': return 'Problem Bookmarks';
       case 'notes': return 'Problem Notes';
       case 'cohorts': return 'Cohorts & Teams';
-      case 'billing': return 'Billing & Pro Settings';
       default: return 'Dashboard';
     }
   };
@@ -272,11 +269,6 @@ function AppContent() {
               {/* PAGE 11: COHORTS & TEAMS */}
               {activePage === 'cohorts' && (
                 <CohortsView activeHandle={handle} />
-              )}
-
-              {/* PAGE 12: BILLING & PRO SETTINGS */}
-              {activePage === 'billing' && (
-                <BillingView />
               )}
             </div>
           ) : null}

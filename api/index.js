@@ -8,7 +8,6 @@ import { setupAuthAndCohortRoutes } from './auth.js';
 import { setupAutomationRoutes } from './automation.js';
 import { generateSvgBadge } from './badge.js';
 import { getAggregatedUserStats } from './leetcode.js';
-import { setupStripeRoutes } from './stripe.js';
 
 dotenv.config();
 
@@ -17,10 +16,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Register Auth, Cohorts, Automation & Stripe endpoints
+// Register Auth, Cohorts & Automation endpoints
 setupAuthAndCohortRoutes(app);
 setupAutomationRoutes(app);
-setupStripeRoutes(app);
 
 // Server Response Cache (10 min TTL)
 const cache = new Map();
