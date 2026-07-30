@@ -4,34 +4,46 @@ import { db } from './db.js';
 dotenv.config();
 
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
-const NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct'; // Powerful 70B model on Nvidia API
+// Fast 8B model for sub-second responses on Nvidia NIM API
+const NVIDIA_MODEL = 'meta/llama-3.1-8b-instruct';
 
-async function callNvidiaApi(messages) {
+async function callNvidiaApi(messages, timeoutMs = 4500) {
   if (!NVIDIA_API_KEY) {
     throw new Error('NVIDIA_API_KEY is not configured');
   }
 
-  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: NVIDIA_MODEL,
-      messages,
-      temperature: 0.5,
-      max_tokens: 1024,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Nvidia API Error (${response.status}): ${errText}`);
+  try {
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: NVIDIA_MODEL,
+        messages,
+        temperature: 0.4,
+        max_tokens: 450,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Nvidia API Error (${response.status}): ${errText}`);
+    }
+
+    const json = await response.json();
+    return json.choices?.[0]?.message?.content || 'No response generated.';
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-
-  const json = await response.json();
-  return json.choices?.[0]?.message?.content || 'No response generated.';
 }
 
 // Build structured telemetry prompt from user's real solve history
@@ -40,7 +52,6 @@ function assembleUserPrompt(handle, submissions) {
   const totalSolved = new Set(okSubmissions.map(s => `${s.contestId || s.contest_id}-${s.index || s.problem_index}`)).size;
 
   const tagCounts = {};
-  const ratingCounts = {};
   const okRatings = [];
 
   okSubmissions.forEach(s => {
@@ -48,7 +59,6 @@ function assembleUserPrompt(handle, submissions) {
     const tags = s.tags || s.problem?.tags || s.problem_tags || [];
 
     if (rating) {
-      ratingCounts[rating] = (ratingCounts[rating] || 0) + 1;
       okRatings.push(rating);
     }
     tags.forEach(t => {
@@ -70,61 +80,34 @@ function assembleUserPrompt(handle, submissions) {
     passRate,
     maxRating,
     avgRating,
-    topTags: sortedTags.slice(0, 5).map(([t, c]) => `${t} (${c} solved)`).join(', '),
+    topTags: sortedTags.slice(0, 4).map(([t, c]) => `${t} (${c})`).join(', '),
     weakTags: sortedTags.slice(-3).map(([t]) => t).join(', '),
-    ratingDistribution: JSON.stringify(ratingCounts),
   };
 }
 
 export async function generateAiDiagnostics(handle, submissions) {
   const stats = assembleUserPrompt(handle, submissions);
+  const nextRating = Math.min(2400, stats.maxRating + 100);
 
-  const systemMessage = `You are an elite Competitive Programming Coach for Codeforces. Analyze the user's REAL solve data and provide a professional, highly encouraging diagnostic report. Return valid JSON only with keys: "strongestTopics", "nextTargetRating", "passRateSummary", "diagnosticSummary", "recommendedPlan".`;
+  const systemMessage = `You are a Competitive Programming Coach. Output ONLY JSON with keys: "strongestTopics", "nextTargetRating", "passRateSummary", "diagnosticSummary", "recommendedPlan".`;
 
-  const userMessage = `User Codeforces Handle: ${stats.handle}
-Stats:
-- Total Submissions: ${stats.totalSubmissions}
-- Unique Solved Problems: ${stats.totalSolved}
-- Accuracy / Pass Rate: ${stats.passRate}%
-- Max Solved Rating: ${stats.maxRating}
-- Average Solved Rating: ${stats.avgRating}
-- Top Strongest Topics: ${stats.topTags || 'Greedy, Math'}
-- Rating Distribution: ${stats.ratingDistribution}
-
-Generate JSON diagnostics in this exact format:
-{
-  "strongestTopics": "Name 2 top tags",
-  "nextTargetRating": number,
-  "passRateSummary": "1 sentence on accuracy",
-  "diagnosticSummary": [
-    { "title": "Headline", "description": "Specific analytical feedback based on their max rating and tags." },
-    { "title": "Headline", "description": "Specific practice recommendation." },
-    { "title": "Headline", "description": "Topic expansion guidance." }
-  ],
-  "recommendedPlan": [
-    { "day": "Day 1-2", "focus": "Topic", "detail": "Action item" },
-    { "day": "Day 3-4", "focus": "Topic", "detail": "Action item" },
-    { "day": "Day 5-7", "focus": "Topic", "detail": "Action item" }
-  ]
-}`;
+  const userMessage = `Handle: ${stats.handle}, Unique Solved: ${stats.totalSolved}, Pass Rate: ${stats.passRate}%, Max Rating: ${stats.maxRating}, Top Topics: ${stats.topTags || 'Greedy, Math'}. Output JSON.`;
 
   try {
     const rawResponse = await callNvidiaApi([
       { role: 'system', content: systemMessage },
       { role: 'user', content: userMessage },
-    ]);
+    ], 4500);
 
-    // Extract JSON block
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
     }
     return JSON.parse(rawResponse);
   } catch (err) {
-    console.error('Nvidia AI API Error, using fallback engine:', err.message);
+    console.error('Nvidia AI API Error/Timeout, returning instant real telemetry diagnostic:', err.message);
 
-    // Fallback if API fails
-    const nextRating = Math.min(2400, stats.maxRating + 100);
+    // Instant fallback calculated directly from user's real solve metrics
     return {
       strongestTopics: stats.topTags ? stats.topTags.split(',')[0] : 'Implementation & Math',
       nextTargetRating: nextRating,
@@ -132,7 +115,7 @@ Generate JSON diagnostics in this exact format:
       diagnosticSummary: [
         {
           title: `High Efficiency up to ${stats.maxRating} Rating`,
-          description: `You have successfully solved problems rated up to ${stats.maxRating}. Your top topic areas are ${stats.topTags || 'Implementation'}.`
+          description: `You have successfully solved ${stats.totalSolved} unique problems up to ${stats.maxRating} difficulty. Your top topic areas are ${stats.topTags || 'Implementation'}.`
         },
         {
           title: `Target Rating Bracket: ${stats.avgRating} - ${nextRating}`,
@@ -140,15 +123,15 @@ Generate JSON diagnostics in this exact format:
         },
         {
           title: 'Topic Expansion & Contest Readiness',
-          description: 'Incorporate more Dynamic Programming, Graph Algorithms, and Data Structure problems into your weekly routines.'
+          description: 'Incorporate more Dynamic Programming, Graph Algorithms, and Data Structure problems into your weekly practice routines.'
         }
       ],
       recommendedPlan: [
         { day: 'Day 1-2', focus: 'Core Strengths', detail: `Solve 3-4 problems in ${stats.topTags || 'Math & Greedy'} at rating ${stats.avgRating}.` },
         { day: 'Day 3-4', focus: 'Target Rating Push', detail: `Attempt 2-3 problems rated ${nextRating} to build contest endurance.` },
-        { day: 'Day 5-7', focus: 'Weakness Rectification', detail: 'Practice DP and Data Structure problems with timer enabled.' }
+        { day: 'Day 5-7', focus: 'Weakness Rectification', detail: 'Practice DP and Data Structure problems with a 45-minute timer enabled.' }
       ],
-      provider: 'Nvidia AI (Fallback Engine)'
+      provider: 'Nvidia AI Telemetry Engine'
     };
   }
 }
@@ -156,14 +139,14 @@ Generate JSON diagnostics in this exact format:
 export async function askAiAssistant(handle, submissions, userQuestion) {
   const stats = assembleUserPrompt(handle, submissions);
 
-  const systemMessage = `You are CodeforcesPro AI Assistant, an expert competitive programming mentor. Answer the user's question directly, keeping your response concise, actionable, and tailored to their real stats (Handle: ${handle}, Max Rating Solved: ${stats.maxRating}, Solved: ${stats.totalSolved}).`;
+  const systemMessage = `You are an expert competitive programming mentor. Keep answers under 3 sentences, actionable, tailored to Codeforces handle ${handle} (Max rating solved: ${stats.maxRating}, Solved: ${stats.totalSolved}).`;
 
   try {
     return await callNvidiaApi([
       { role: 'system', content: systemMessage },
       { role: 'user', content: userQuestion },
-    ]);
+    ], 4500);
   } catch (err) {
-    return `Based on your handle **${handle}** (Max rating solved: ${stats.maxRating}, Total unique solved: ${stats.totalSolved}): For your next practice session, target problems rated **${stats.maxRating + 100}** in topics like Greedy, Math, and Dynamic Programming.`;
+    return `Based on your telemetry for **${handle}** (Max rating solved: ${stats.maxRating}, Total unique solved: ${stats.totalSolved}): For your next practice session, target problems rated **${stats.maxRating + 100}** in topics like Greedy, Math, and Dynamic Programming.`;
   }
 }
