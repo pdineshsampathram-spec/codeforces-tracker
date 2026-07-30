@@ -6,9 +6,40 @@ const COLLECTIONS_KEY = 'cf_collections';
 
 const DEFAULT_COLLECTIONS = ['To Solve', 'Review Later', 'Contest Prep'];
 
+const SEED_BOOKMARKS = {
+  '1944-A': {
+    problemKey: '1944-A',
+    contestId: 1944,
+    index: 'A',
+    name: 'Destroying Bridges',
+    rating: 800,
+    tags: ['greedy', 'math'],
+    collection: 'To Solve',
+    createdAt: new Date().toISOString(),
+  },
+  '1950-A': {
+    problemKey: '1950-A',
+    contestId: 1950,
+    index: 'A',
+    name: 'Stair, Peak, or Neither?',
+    rating: 800,
+    tags: ['implementation'],
+    collection: 'Review Later',
+    createdAt: new Date().toISOString(),
+  }
+};
+
 export function getBookmarks() {
-  try { return JSON.parse(localStorage.getItem(BOOKMARKS_KEY) || '{}'); }
-  catch { return {}; }
+  try {
+    const raw = localStorage.getItem(BOOKMARKS_KEY);
+    if (!raw) {
+      localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(SEED_BOOKMARKS));
+      return SEED_BOOKMARKS;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }
 
 export function setBookmarks(bm) {

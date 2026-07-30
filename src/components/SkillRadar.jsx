@@ -8,26 +8,27 @@ import {
   Tooltip,
 } from 'chart.js';
 import { Radar } from 'react-chartjs-2';
-import { Hexagon } from 'lucide-react';
+import { Hexagon, Sparkles } from 'lucide-react';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip);
 
 export default function SkillRadar({ submissions }) {
   const { labels, values, maxVal } = useMemo(() => {
     const tagCounts = {};
-    const okSubs = submissions.filter(s => s.verdict === 'OK');
+    const okSubs = submissions.filter(s => s.verdict === 'OK' || s.verdict === 'Accepted');
     const seen = new Set();
 
     okSubs.forEach(sub => {
-      const key = `${sub.problem?.contestId}-${sub.problem?.index}`;
+      const contestId = sub.problem?.contestId || sub.contest_id;
+      const index = sub.problem?.index || sub.problem_index;
+      const key = `${contestId}-${index}`;
       if (seen.has(key)) return;
       seen.add(key);
 
-      if (sub.problem?.tags) {
-        sub.problem.tags.forEach(t => {
-          tagCounts[t] = (tagCounts[t] || 0) + 1;
-        });
-      }
+      const tags = sub.problem?.tags || sub.problem_tags || [];
+      tags.forEach(t => {
+        tagCounts[t] = (tagCounts[t] || 0) + 1;
+      });
     });
 
     const sorted = Object.entries(tagCounts)
@@ -41,7 +42,21 @@ export default function SkillRadar({ submissions }) {
     };
   }, [submissions]);
 
-  if (labels.length < 3) return null;
+  // Graceful empty state when data has < 3 solved tags
+  if (labels.length < 3) {
+    return (
+      <div className="ent-card" style={{ marginBottom: '1.5rem', textAlign: 'center', padding: '2.5rem 1.5rem' }}>
+        <Hexagon size={28} style={{ color: 'var(--accent-blue)', margin: '0 auto 0.75rem', opacity: 0.7 }} />
+        <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.3rem' }}>Skill Proficiency Radar</h3>
+        <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', maxWidth: '420px', margin: '0 auto 1rem', lineHeight: '1.5' }}>
+          Solve problems across 3+ topic tags (Math, Greedy, DP, Implementation) to populate your skill proficiency radar visualization.
+        </p>
+        <span className="status-badge done" style={{ fontSize: '0.7rem' }}>
+          <Sparkles size={11} /> Solve 3+ tagged problems to unlock radar
+        </span>
+      </div>
+    );
+  }
 
   const data = {
     labels,

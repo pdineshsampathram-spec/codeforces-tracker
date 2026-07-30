@@ -3,9 +3,30 @@ import { StickyNote, Search, Trash2, ExternalLink, Calendar, FileText, Plus } fr
 
 const NOTES_KEY = 'cf_problem_notes';
 
+const SEED_NOTES = {
+  '1944-A': {
+    content: 'Key Observation: If k >= n-1, all vertices can be disconnected except 1. Minimum reachable islands = 1. Otherwise, island 1 can never be isolated, minimum reachable islands = n.',
+    contestId: 1944,
+    index: 'A',
+    name: 'Destroying Bridges',
+    rating: 800,
+    tags: ['greedy', 'math'],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+};
+
 export function getNotes() {
-  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); }
-  catch { return {}; }
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    if (!raw) {
+      localStorage.setItem(NOTES_KEY, JSON.stringify(SEED_NOTES));
+      return SEED_NOTES;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 }
 
 export function setNotes(notes) {

@@ -217,7 +217,6 @@ function AppContent() {
                   <ProfileHero user={data.user} />
                   <StatCards submissions={data.submissions} />
                   <SkillRadar submissions={data.submissions} />
-                  <AnalyticsCharts submissions={data.submissions} ratingHistory={data.ratingHistory} />
                   <ActivityHeatmap submissions={data.submissions} />
                   <SubmissionsTable submissions={data.submissions.slice(0, 10)} />
                 </div>
@@ -241,8 +240,6 @@ function AppContent() {
               {/* PAGE 5: DEEP ANALYTICS */}
               {activePage === 'analytics' && (
                 <div>
-                  <StatCards submissions={data.submissions} />
-                  <SkillRadar submissions={data.submissions} />
                   <AnalyticsCharts submissions={data.submissions} ratingHistory={data.ratingHistory} />
                 </div>
               )}
