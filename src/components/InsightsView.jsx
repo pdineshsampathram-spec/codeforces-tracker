@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, TrendingUp, Zap, Target, AlertTriangle, Lightbulb, CheckCircle2, RefreshCw, Send, Bot, User } from 'lucide-react';
+import { Sparkles, TrendingUp, Zap, Target, Lightbulb, CheckCircle2, RefreshCw, Send, Bot, User, AlertCircle } from 'lucide-react';
 
-export default function InsightsView({ submissions, user }) {
+export default function InsightsView({ submissions = [], user = null }) {
   const [aiData, setAiData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [chatQuestion, setChatQuestion] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [chatLoading, setChatLoading] = useState(false);
 
-  const userHandle = user ? user.handle : 'pdineshsampathram';
+  const safeSubmissions = Array.isArray(submissions) ? submissions : [];
+  const userHandle = user?.handle || 'pdineshsampathram';
 
   const fetchAiInsights = async () => {
     setLoading(true);
@@ -16,7 +17,7 @@ export default function InsightsView({ submissions, user }) {
       const res = await fetch('/api/ai/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle: userHandle, submissions }),
+        body: JSON.stringify({ handle: userHandle, submissions: safeSubmissions }),
       });
       const json = await res.json();
       if (json.success && json.data) {
@@ -46,7 +47,7 @@ export default function InsightsView({ submissions, user }) {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle: userHandle, submissions, question: q }),
+        body: JSON.stringify({ handle: userHandle, submissions: safeSubmissions, question: q }),
       });
       const json = await res.json();
       if (json.success && json.answer) {
@@ -59,9 +60,13 @@ export default function InsightsView({ submissions, user }) {
     }
   };
 
-  const totalSubmissions = submissions.length;
-  const okSubmissions = submissions.filter(s => s.verdict === 'OK' || s.verdict === 'Accepted');
-  const passRate = totalSubmissions > 0 ? ((okSubmissions.length / totalSubmissions) * 100).toFixed(1) : 0;
+  const totalSubmissions = safeSubmissions.length;
+  const okSubmissions = safeSubmissions.filter(s => s?.verdict === 'OK' || s?.verdict === 'Accepted');
+  const passRate = totalSubmissions > 0 ? ((okSubmissions.length / totalSubmissions) * 100).toFixed(1) : '0.0';
+
+  // Defensive array checks
+  const diagnosticItems = Array.isArray(aiData?.diagnosticSummary) ? aiData.diagnosticSummary : [];
+  const recommendedPlans = Array.isArray(aiData?.recommendedPlan) ? aiData.recommendedPlan : [];
 
   return (
     <div>
@@ -72,7 +77,7 @@ export default function InsightsView({ submissions, user }) {
             AI Performance Diagnostics & Skill Insights
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.2rem' }}>
-            Live LLM analysis powered by Nvidia Llama 3.3 70B & your real Codeforces telemetry.
+            Live LLM analysis powered by Nvidia Llama 8B & your real Codeforces telemetry.
           </p>
         </div>
 
@@ -87,7 +92,7 @@ export default function InsightsView({ submissions, user }) {
       </div>
 
       {/* KPI Insight Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
         {/* Card 1 */}
         <div className="ent-card" style={{ borderLeft: '3px solid var(--accent-purple)' }}>
           <div className="kpi-header">
@@ -98,7 +103,7 @@ export default function InsightsView({ submissions, user }) {
             <span className="status-badge done">Strongest</span>
           </div>
           <div className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-purple)', textTransform: 'uppercase' }}>
-            {aiData ? aiData.strongestTopics : 'Math & Greedy'}
+            {aiData?.strongestTopics || 'Math & Greedy'}
           </div>
           <div className="kpi-subtext">
             Highest first-attempt success rate based on historical submissions.
@@ -115,7 +120,7 @@ export default function InsightsView({ submissions, user }) {
             <span className="status-badge done">Target</span>
           </div>
           <div className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-green)' }}>
-            ★ {aiData ? aiData.nextTargetRating : 1300} Rating
+            ★ {aiData?.nextTargetRating || 1300} Rating
           </div>
           <div className="kpi-subtext">
             Data-backed problem difficulty target to maximize rating growth.
@@ -137,7 +142,7 @@ export default function InsightsView({ submissions, user }) {
             {okSubmissions.length} of {totalSubmissions} AC
           </div>
           <div className="kpi-subtext">
-            {aiData ? aiData.passRateSummary : 'Your accepted solution ratio is stable across sets.'}
+            {aiData?.passRateSummary || 'Your accepted solution ratio is stable across sets.'}
           </div>
         </div>
       </div>
@@ -150,7 +155,7 @@ export default function InsightsView({ submissions, user }) {
             Live AI Diagnostic Summary
           </h3>
           <span style={{ fontSize: '0.725rem', color: 'var(--text-subtle)' }}>
-            Model: Nvidia Llama 3.3 70B Instruct
+            Engine: Nvidia Llama Telemetry Model
           </span>
         </div>
 
@@ -159,25 +164,29 @@ export default function InsightsView({ submissions, user }) {
             <div className="spinner" style={{ margin: '0 auto 0.75rem', width: '20px', height: '20px', border: '2px solid var(--border-subtle)', borderTopColor: 'var(--accent-purple)', borderRadius: '50%' }} />
             Analyzing real solve telemetry...
           </div>
-        ) : (
+        ) : diagnosticItems.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {(aiData?.diagnosticSummary || []).map((item, idx) => (
+            {diagnosticItems.map((item, idx) => (
               <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)', display: 'flex', gap: '0.85rem' }}>
                 <CheckCircle2 size={18} style={{ color: idx === 0 ? 'var(--accent-green)' : idx === 1 ? 'var(--accent-blue)' : 'var(--accent-orange)', flexShrink: 0, marginTop: '0.1rem' }} />
                 <div>
-                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>{item.title}</h4>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>{item.title || 'Diagnostic Point'}</h4>
                   <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-                    {item.description}
+                    {item.description || ''}
                   </p>
                 </div>
               </div>
             ))}
           </div>
+        ) : (
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            Click "Regenerate AI Diagnostics" above to generate diagnostic analytics for handle <strong>{userHandle}</strong>.
+          </div>
         )}
       </div>
 
       {/* Recommended 7-Day Practice Plan */}
-      {aiData?.recommendedPlan && (
+      {recommendedPlans.length > 0 && (
         <div className="ent-card" style={{ marginBottom: '1.5rem' }}>
           <div className="ent-card-header">
             <h3 className="ent-card-title">
@@ -186,12 +195,12 @@ export default function InsightsView({ submissions, user }) {
             </h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-            {aiData.recommendedPlan.map((plan, i) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+            {recommendedPlans.map((plan, i) => (
               <div key={i} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
-                <span className="status-badge done" style={{ fontSize: '0.675rem', marginBottom: '0.5rem' }}>{plan.day}</span>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', margin: '0.3rem 0 0.2rem' }}>{plan.focus}</h4>
-                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>{plan.detail}</p>
+                <span className="status-badge done" style={{ fontSize: '0.675rem', marginBottom: '0.5rem' }}>{plan.day || `Step ${i + 1}`}</span>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', margin: '0.3rem 0 0.2rem' }}>{plan.focus || 'Practice Focus'}</h4>
+                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>{plan.detail || ''}</p>
               </div>
             ))}
           </div>
