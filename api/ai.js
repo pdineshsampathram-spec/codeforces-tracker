@@ -6,6 +6,41 @@ dotenv.config();
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_MODEL = 'meta/llama-3.1-8b-instruct';
 
+// Curated Bank of REAL Codeforces Problems with exact Contest IDs, Names, Ratings & Tags
+const REAL_CF_PROBLEMS = [
+  // 800 Rating
+  { id: '1944A', name: 'Destroying Bridges', rating: 800, tags: ['greedy', 'math'], contest: 'Codeforces Round 934 (Div. 2)', url: 'https://codeforces.com/problemset/problem/1944/A' },
+  { id: '1950A', name: 'Stair, Peak, or Neither?', rating: 800, tags: ['implementation'], contest: 'Codeforces Round 937 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1950/A' },
+  { id: '1950C', name: 'Clock Conversion', rating: 800, tags: ['implementation', 'strings'], contest: 'Codeforces Round 937 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1950/C' },
+  { id: '1915C', name: 'Can I Square?', rating: 800, tags: ['binary search', 'math'], contest: 'Codeforces Round 918 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1915/C' },
+  { id: '1850A', name: 'To My Critics', rating: 800, tags: ['implementation'], contest: 'Codeforces Round 886 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1850/A' },
+  { id: '1850C', name: 'Word on the Paper', rating: 800, tags: ['implementation'], contest: 'Codeforces Round 886 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1850/C' },
+  { id: '1927A', name: 'Make it White', rating: 800, tags: ['greedy', 'strings'], contest: 'Codeforces Round 925 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1927/A' },
+  { id: '1985A', name: 'Creating Words', rating: 800, tags: ['implementation', 'strings'], contest: 'Codeforces Round 952 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1985/A' },
+
+  // 900-1000 Rating
+  { id: '1941A', name: 'Rudolf and the Ticket', rating: 800, tags: ['brute force'], contest: 'Codeforces Round 933 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1941/A' },
+  { id: '1950B', name: 'Progressive Matrix', rating: 900, tags: ['constructive algorithms'], contest: 'Codeforces Round 937 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1950/B' },
+  { id: '1921C', name: 'Sending Messages', rating: 900, tags: ['greedy'], contest: 'Codeforces Round 920 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1921/C' },
+  { id: '1915D', name: 'Unnatural Language Processing', rating: 900, tags: ['greedy', 'strings'], contest: 'Codeforces Round 918 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1915/D' },
+
+  // 1000-1200 Rating
+  { id: '1941C', name: 'Rudolf and the Ugly String', rating: 1000, tags: ['dp', 'greedy', 'strings'], contest: 'Codeforces Round 933 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1941/C' },
+  { id: '1927C', name: 'Choose the Different Ones!', rating: 1000, tags: ['two pointers'], contest: 'Codeforces Round 925 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1927/C' },
+  { id: '1915E', name: 'Romantic Glasses', rating: 1200, tags: ['data structures', 'math'], contest: 'Codeforces Round 918 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1915/E' },
+  { id: '1950D', name: 'Product of Binary Decimals', rating: 1100, tags: ['brute force', 'dp', 'math'], contest: 'Codeforces Round 937 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1950/D' },
+
+  // 1200-1400 Rating
+  { id: '1941D', name: 'Rudolf and the Ball Game', rating: 1200, tags: ['dfs and similar', 'dp'], contest: 'Codeforces Round 933 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1941/D' },
+  { id: '1927D', name: 'Find the Different Ones!', rating: 1300, tags: ['binary search', 'data structures'], contest: 'Codeforces Round 925 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1927/D' },
+  { id: '1915F', name: 'Greetings', rating: 1400, tags: ['data structures', 'sortings'], contest: 'Codeforces Round 918 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1915/F' },
+
+  // 1400-1600 Rating
+  { id: '1941E', name: 'Rudolf and k Bridges', rating: 1500, tags: ['data structures', 'dp'], contest: 'Codeforces Round 933 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1941/E' },
+  { id: '1927E', name: 'Klever Permutation', rating: 1400, tags: ['constructive algorithms'], contest: 'Codeforces Round 925 (Div. 3)', url: 'https://codeforces.com/problemset/problem/1927/E' },
+  { id: '1915G', name: 'Bicycles', rating: 1600, tags: ['shortest paths', 'graphs'], contest: 'Codeforces Round 918 (Div. 4)', url: 'https://codeforces.com/problemset/problem/1915/G' },
+];
+
 async function callNvidiaApi(messages, timeoutMs = 6000) {
   if (!NVIDIA_API_KEY) {
     throw new Error('NVIDIA_API_KEY is not configured');
@@ -53,7 +88,8 @@ function assembleUserPrompt(handle, inputSubmissions = []) {
   }
 
   const okSubmissions = subs.filter(s => s.verdict === 'OK' || s.verdict === 'Accepted');
-  const uniqueSolved = new Set(okSubmissions.map(s => `${s.contestId || s.contest_id}-${s.index || s.problem_index}`)).size;
+  const solvedKeys = new Set(okSubmissions.map(s => `${s.contestId || s.contest_id}-${s.index || s.problem_index}`));
+  const uniqueSolved = solvedKeys.size;
 
   const tagCounts = {};
   const okRatings = [];
@@ -80,6 +116,12 @@ function assembleUserPrompt(handle, inputSubmissions = []) {
   const topTopicNames = sortedTags.slice(0, 4).map(([t]) => t.toUpperCase()).join(', ') || 'IMPLEMENTATION, MATH';
   const topTopicsDetailed = sortedTags.slice(0, 4).map(([t, c]) => `${t} (${c} solved)`).join(', ') || 'Implementation, Math';
 
+  // Filter REAL candidate problems matching user target rating that user has NOT solved yet
+  const targetRating = Math.min(2400, maxRating + 100);
+  const recommendedProblems = REAL_CF_PROBLEMS.filter(p => !solvedKeys.has(p.id))
+    .sort((a, b) => Math.abs(a.rating - targetRating) - Math.abs(b.rating - targetRating))
+    .slice(0, 5);
+
   return {
     handle,
     totalSubmissions,
@@ -87,14 +129,16 @@ function assembleUserPrompt(handle, inputSubmissions = []) {
     passRate,
     maxRating,
     avgRating,
+    targetRating,
     topTopicNames,
     topTopicsDetailed,
+    recommendedProblems,
   };
 }
 
 export async function generateAiDiagnostics(handle, submissions = []) {
   const stats = assembleUserPrompt(handle, submissions);
-  const nextTargetRating = Math.min(3000, stats.maxRating + 100);
+  const nextTargetRating = stats.targetRating;
 
   const systemMessage = `You are an elite Competitive Programming Coach for Codeforces.
 Analyze the user's real solve metrics and return ONLY a single JSON object.
@@ -166,7 +210,19 @@ Generate tailored JSON diagnostics for this handle.`;
 export async function askAiAssistant(handle, submissions = [], userQuestion = '') {
   const stats = assembleUserPrompt(handle, submissions);
 
-  const systemMessage = `You are CodeforcesPro AI Assistant, an expert competitive programming coach. Answer directly in under 3 concise sentences for handle ${handle} (Max Rating Solved: ${stats.maxRating}, Total Solved: ${stats.uniqueSolved}, Top Topics: ${stats.topTopicNames}).`;
+  const realProblemListText = stats.recommendedProblems
+    .map(p => `- ${p.id}: "${p.name}" (Rating: ${p.rating}, Tags: ${p.tags.join(', ')}, Contest: ${p.contest})`)
+    .join('\n');
+
+  const systemMessage = `You are CodeforcesPro AI Assistant, an expert Codeforces competitive programming coach.
+Handle: ${handle}
+User Telemetry: Max Rating Solved = ${stats.maxRating}, Total Solved = ${stats.uniqueSolved}, Top Solved Topics = ${stats.topTopicNames}.
+
+CRITICAL INSTRUCTION FOR PROBLEM RECOMMENDATIONS:
+NEVER invent or hallucinate fake problem names (e.g. NEVER suggest "C. 123"). ALWAYS recommend ONLY from this real list of Codeforces problems matching their rating level:
+${realProblemListText}
+
+When recommending a problem, include its EXACT ID, exact Name, Rating, Contest, and tell the user why it fits their skill level. Keep your answer under 4 concise, helpful sentences.`;
 
   try {
     return await callNvidiaApi([
@@ -174,6 +230,7 @@ export async function askAiAssistant(handle, submissions = [], userQuestion = ''
       { role: 'user', content: userQuestion },
     ], 6000);
   } catch (err) {
-    return `Based on telemetry for **${handle}** (Max rating solved: ${stats.maxRating}, Total solved: ${stats.uniqueSolved}, Top topics: ${stats.topTopicNames}): For your next practice session, target problems rated **${stats.maxRating + 100}** in ${stats.topTopicNames}.`;
+    const p1 = stats.recommendedProblems[0] || REAL_CF_PROBLEMS[0];
+    return `Based on telemetry for **${handle}** (Max rating solved: ${stats.maxRating}, Total solved: ${stats.uniqueSolved}):\n\nI recommend solving **${p1.id} - "${p1.name}"** (Rating: ${p1.rating}, ${p1.contest}). It matches your target difficulty of ${stats.targetRating}!`;
   }
 }
