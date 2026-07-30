@@ -1,0 +1,66 @@
+{
+  "name": "CodeforcesPro — Sunday Weekly Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Weekly Trigger (Sunday 6 PM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://codeforces-tracker-nine.vercel.app/api/automation/weekly-summary/pdineshsampathram",
+        "options": {}
+      },
+      "id": "2",
+      "name": "Fetch Weekly Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://codeforces-tracker-nine.vercel.app/api/automation/send-alert",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "📊 Weekly CP Progress Report"
+            },
+            {
+              "name": "message",
+              "value": "{{ $json.digestMessage }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Send Weekly Digest Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Weekly Trigger (Sunday 6 PM)": {
+      "main": [[{ "node": "Fetch Weekly Summary", "type": "main", "index": 0 }]]
+    },
+    "Fetch Weekly Summary": {
+      "main": [[{ "node": "Send Weekly Digest Alert", "type": "main", "index": 0 }]]
+    }
+  }
+}

@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { db } from './db.js';
 import { generateAiDiagnostics, askAiAssistant } from './ai.js';
 import { setupAuthAndCohortRoutes } from './auth.js';
+import { setupAutomationRoutes } from './automation.js';
 
 dotenv.config();
 
@@ -13,8 +14,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Register Auth & Cohorts endpoints
+// Register Auth, Cohorts & Automation endpoints
 setupAuthAndCohortRoutes(app);
+setupAutomationRoutes(app);
 
 // Server Response Cache (10 min TTL)
 const cache = new Map();
