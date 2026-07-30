@@ -6,6 +6,8 @@ import { db } from './db.js';
 import { generateAiDiagnostics, askAiAssistant } from './ai.js';
 import { setupAuthAndCohortRoutes } from './auth.js';
 import { setupAutomationRoutes } from './automation.js';
+import { generateSvgBadge } from './badge.js';
+import { getAggregatedUserStats } from './leetcode.js';
 
 dotenv.config();
 
@@ -208,6 +210,41 @@ app.post('/api/ai/chat', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// 3d. Embeddable SVG Badge Endpoint (For GitHub READMEs)
+app.get('/api/badge/:handle.svg', async (req, res) => {
+  let { handle } = req.params;
+  handle = handle.replace(/\.svg$/, '');
+  
+  try {
+    const userInfoList = await fetchFromCodeforces('user.info', [['handles', handle]]).catch(() => []);
+    const userInfo = userInfoList?.[0] || null;
+    const svg = generateSvgBadge(handle, userInfo);
+    
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+    return res.send(svg);
+  } catch (err) {
+    const svg = generateSvgBadge(handle);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    return res.send(svg);
+  }
+});
+
+app.get('/api/badge/:handle', async (req, res) => {
+  const { handle } = req.params;
+  const cleanHandle = handle.replace(/\.svg$/, '');
+  const svg = generateSvgBadge(cleanHandle);
+  res.setHeader('Content-Type', 'image/svg+xml');
+  return res.send(svg);
+});
+
+// 3e. Multi-Platform Aggregated Telemetry Endpoint
+app.get('/api/user-aggregated/:handle', async (req, res) => {
+  const { handle } = req.params;
+  const aggregated = await getAggregatedUserStats(handle);
+  return res.json({ success: true, data: aggregated });
 });
 
 // 4. Upcoming Contests Endpoint
