@@ -3,7 +3,34 @@ import { Sparkles, TrendingUp, Zap, Target, Lightbulb, CheckCircle2, RefreshCw, 
 
 function renderSafeText(val, fallback = '') {
   if (val === null || val === undefined) return fallback;
-  if (typeof val === 'string' || typeof val === 'number') return String(val);
+
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return renderSafeText(parsed, fallback);
+      } catch {
+        return val;
+      }
+    }
+    return val;
+  }
+
+  if (typeof val === 'number') return String(val);
+  
+  if (Array.isArray(val)) {
+    if (val.length === 0) return fallback;
+    const items = val.map(item => {
+      if (typeof item === 'string' || typeof item === 'number') return String(item);
+      if (typeof item === 'object' && item !== null) {
+        return item.topic || item.TOPIC || item.name || item.title || item.tag || JSON.stringify(item);
+      }
+      return String(item);
+    });
+    return items.join(', ');
+  }
+
   if (typeof val === 'object') {
     if (val.summary) return String(val.summary);
     if (val.description) return String(val.description);
