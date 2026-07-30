@@ -188,7 +188,7 @@ app.get('/api/synclog/:handle', async (req, res) => {
   return res.json({ success: true, data: logs });
 });
 
-// 3b. Real AI Diagnostics Endpoint (Powered by Nvidia Llama 3.3 70B)
+// 3b. Real AI Diagnostics Endpoint (Powered by Nvidia Llama)
 app.post('/api/ai/insights', async (req, res) => {
   try {
     const { handle, submissions = [] } = req.body;
@@ -196,6 +196,15 @@ app.post('/api/ai/insights', async (req, res) => {
     const result = await generateAiDiagnostics(handle, submissions);
     return res.json({ success: true, data: result });
   } catch (err) {
+    if (err.rateLimited) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        error: err.message,
+        resetTime: err.resetTime,
+        remainingSeconds: err.remainingSeconds,
+      });
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -208,6 +217,15 @@ app.post('/api/ai/chat', async (req, res) => {
     const answer = await askAiAssistant(handle, submissions, question);
     return res.json({ success: true, answer });
   } catch (err) {
+    if (err.rateLimited) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        error: err.message,
+        resetTime: err.resetTime,
+        remainingSeconds: err.remainingSeconds,
+      });
+    }
     return res.status(500).json({ success: false, error: err.message });
   }
 });

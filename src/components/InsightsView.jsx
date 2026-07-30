@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, TrendingUp, Zap, Target, Lightbulb, CheckCircle2, RefreshCw, Send, Bot, User } from 'lucide-react';
+import RateLimitModal from './RateLimitModal';
 
 function renderSafeText(val, fallback = '') {
   if (val === null || val === undefined) return fallback;
@@ -47,6 +48,8 @@ export default function InsightsView({ submissions = [], user = null }) {
   const [chatQuestion, setChatQuestion] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [rateLimitData, setRateLimitData] = useState(null);
+  const [isRateLimitOpen, setIsRateLimitOpen] = useState(false);
 
   const safeSubmissions = Array.isArray(submissions) ? submissions : [];
   const userHandle = user?.handle || 'pdineshsampathram';
@@ -60,6 +63,11 @@ export default function InsightsView({ submissions = [], user = null }) {
         body: JSON.stringify({ handle: userHandle, submissions: safeSubmissions }),
       });
       const json = await res.json();
+      if (json.rateLimited || res.status === 429) {
+        setRateLimitData(json);
+        setIsRateLimitOpen(true);
+        return;
+      }
       if (json.success && json.data) {
         setAiData(json.data);
       }
@@ -90,6 +98,12 @@ export default function InsightsView({ submissions = [], user = null }) {
         body: JSON.stringify({ handle: userHandle, submissions: safeSubmissions, question: q }),
       });
       const json = await res.json();
+      if (json.rateLimited || res.status === 429) {
+        setRateLimitData(json);
+        setIsRateLimitOpen(true);
+        setChatHistory(prev => [...prev, { role: 'assistant', content: 'Today\'s API rate limit reached on this server. Please wait until UTC midnight reset.' }]);
+        return;
+      }
       if (json.success && json.answer) {
         setChatHistory(prev => [...prev, { role: 'assistant', content: renderSafeText(json.answer) }]);
       }
@@ -323,6 +337,13 @@ export default function InsightsView({ submissions = [], user = null }) {
           </button>
         </form>
       </div>
+
+      {/* Rate Limit Modal */}
+      <RateLimitModal
+        isOpen={isRateLimitOpen}
+        onClose={() => setIsRateLimitOpen(false)}
+        rateLimitData={rateLimitData}
+      />
     </div>
   );
 }

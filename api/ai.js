@@ -6,6 +6,27 @@ dotenv.config();
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_MODEL = 'meta/llama-3.1-8b-instruct';
 
+export class RateLimitError extends Error {
+  constructor(message, resetTimeIso, remainingSeconds) {
+    super(message);
+    this.name = 'RateLimitError';
+    this.rateLimited = true;
+    this.resetTime = resetTimeIso;
+    this.remainingSeconds = remainingSeconds;
+  }
+}
+
+// Calculate real UTC midnight API reset time
+function getRealResetTime() {
+  const now = new Date();
+  const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+  const remainingMs = tomorrow.getTime() - now.getTime();
+  return {
+    resetTimeIso: tomorrow.toISOString(),
+    remainingSeconds: Math.max(0, Math.floor(remainingMs / 1000)),
+  };
+}
+
 // Fallback bank of official Codeforces Problems
 const FALLBACK_CF_PROBLEMS = [
   { id: '1944A', name: 'Destroying Bridges', rating: 800, tags: ['greedy', 'math'], contest: 'Codeforces Round 934 (Div. 2)', url: 'https://codeforces.com/problemset/problem/1944/A' },
@@ -99,6 +120,15 @@ async function callNvidiaApi(messages, timeoutMs = 6000) {
 
     clearTimeout(timeoutId);
 
+    if (response.status === 429) {
+      const { resetTimeIso, remainingSeconds } = getRealResetTime();
+      throw new RateLimitError(
+        "Today's API rate limit reached on this server. Please wait until the reset time.",
+        resetTimeIso,
+        remainingSeconds
+      );
+    }
+
     if (!response.ok) {
       const errText = await response.text();
       throw new Error(`Nvidia API Error (${response.status}): ${errText}`);
@@ -148,10 +178,9 @@ async function assembleUserPrompt(handle, inputSubmissions = []) {
   const topTopicNames = sortedTags.slice(0, 4).map(([t]) => t.toUpperCase()).join(', ') || 'IMPLEMENTATION, MATH';
   const topTopicsDetailed = sortedTags.slice(0, 4).map(([t, c]) => `${t} (${c} solved)`).join(', ') || 'Implementation, Math';
 
-  // Fetch full live Codeforces problemset (thousands of official problems)
+  // Fetch full live Codeforces problemset
   const fullProblemset = await fetchLiveProblemset();
 
-  // Filter candidate problems matching user target rating range that user has NOT solved yet
   const targetRating = Math.min(3500, maxRating + 100);
   const recommendedProblems = fullProblemset
     .filter(p => !solvedKeys.has(p.id) && Math.abs(p.rating - targetRating) <= 200)
@@ -214,10 +243,10 @@ Generate tailored JSON diagnostics for this handle.`;
       };
     }
   } catch (err) {
+    if (err.rateLimited) throw err;
     console.error('Nvidia AI API Error, generating telemetry diagnostic report:', err.message);
   }
 
-  // Pure data-backed telemetry report calculated directly from the user's real stats
   return {
     strongestTopics: stats.topTopicNames,
     nextTargetRating: nextTargetRating,
@@ -268,6 +297,7 @@ When answering or recommending problems, ALWAYS recommend official problems with
       { role: 'user', content: userQuestion },
     ], 6000);
   } catch (err) {
+    if (err.rateLimited) throw err;
     const p1 = stats.recommendedProblems[0] || FALLBACK_CF_PROBLEMS[0];
     return `Based on telemetry for **${handle}** (Max rating solved: ${stats.maxRating}, Total solved: ${stats.uniqueSolved}):\n\nI recommend solving **[${p1.id} - ${p1.name}](${p1.url})** (Rating: ${p1.rating}, ${p1.contest}). It matches your target difficulty of ${stats.targetRating}!`;
   }
