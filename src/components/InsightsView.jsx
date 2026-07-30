@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, TrendingUp, Zap, Target, Lightbulb, CheckCircle2, RefreshCw, Send, Bot, User, AlertCircle } from 'lucide-react';
+import { Sparkles, TrendingUp, Zap, Target, Lightbulb, CheckCircle2, RefreshCw, Send, Bot, User } from 'lucide-react';
+
+function renderSafeText(val, fallback = '') {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string' || typeof val === 'number') return String(val);
+  if (typeof val === 'object') {
+    if (val.summary) return String(val.summary);
+    if (val.description) return String(val.description);
+    if (val.text) return String(val.text);
+    if (val.passRate !== undefined) return `${val.passRate}% pass rate across ${val.total || 0} submissions`;
+    return JSON.stringify(val);
+  }
+  return String(val);
+}
 
 export default function InsightsView({ submissions = [], user = null }) {
   const [aiData, setAiData] = useState(null);
@@ -51,7 +64,7 @@ export default function InsightsView({ submissions = [], user = null }) {
       });
       const json = await res.json();
       if (json.success && json.answer) {
-        setChatHistory(prev => [...prev, { role: 'assistant', content: json.answer }]);
+        setChatHistory(prev => [...prev, { role: 'assistant', content: renderSafeText(json.answer) }]);
       }
     } catch (err) {
       setChatHistory(prev => [...prev, { role: 'assistant', content: 'Apologies, I could not generate a response right now. Please try again.' }]);
@@ -103,7 +116,7 @@ export default function InsightsView({ submissions = [], user = null }) {
             <span className="status-badge done">Strongest</span>
           </div>
           <div className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-purple)', textTransform: 'uppercase' }}>
-            {aiData?.strongestTopics || 'Math & Greedy'}
+            {renderSafeText(aiData?.strongestTopics, 'Math & Greedy')}
           </div>
           <div className="kpi-subtext">
             Highest first-attempt success rate based on historical submissions.
@@ -120,7 +133,7 @@ export default function InsightsView({ submissions = [], user = null }) {
             <span className="status-badge done">Target</span>
           </div>
           <div className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-green)' }}>
-            ★ {aiData?.nextTargetRating || 1300} Rating
+            ★ {renderSafeText(aiData?.nextTargetRating, '1300')} Rating
           </div>
           <div className="kpi-subtext">
             Data-backed problem difficulty target to maximize rating growth.
@@ -142,7 +155,7 @@ export default function InsightsView({ submissions = [], user = null }) {
             {okSubmissions.length} of {totalSubmissions} AC
           </div>
           <div className="kpi-subtext">
-            {aiData?.passRateSummary || 'Your accepted solution ratio is stable across sets.'}
+            {renderSafeText(aiData?.passRateSummary, 'Your accepted solution ratio is stable across sets.')}
           </div>
         </div>
       </div>
@@ -170,9 +183,9 @@ export default function InsightsView({ submissions = [], user = null }) {
               <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)', display: 'flex', gap: '0.85rem' }}>
                 <CheckCircle2 size={18} style={{ color: idx === 0 ? 'var(--accent-green)' : idx === 1 ? 'var(--accent-blue)' : 'var(--accent-orange)', flexShrink: 0, marginTop: '0.1rem' }} />
                 <div>
-                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>{item.title || 'Diagnostic Point'}</h4>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.2rem' }}>{renderSafeText(item?.title, 'Diagnostic Point')}</h4>
                   <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-                    {item.description || ''}
+                    {renderSafeText(item?.description, '')}
                   </p>
                 </div>
               </div>
@@ -198,9 +211,9 @@ export default function InsightsView({ submissions = [], user = null }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
             {recommendedPlans.map((plan, i) => (
               <div key={i} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
-                <span className="status-badge done" style={{ fontSize: '0.675rem', marginBottom: '0.5rem' }}>{plan.day || `Step ${i + 1}`}</span>
-                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', margin: '0.3rem 0 0.2rem' }}>{plan.focus || 'Practice Focus'}</h4>
-                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>{plan.detail || ''}</p>
+                <span className="status-badge done" style={{ fontSize: '0.675rem', marginBottom: '0.5rem' }}>{renderSafeText(plan?.day, `Step ${i + 1}`)}</span>
+                <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', margin: '0.3rem 0 0.2rem' }}>{renderSafeText(plan?.focus, 'Practice Focus')}</h4>
+                <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>{renderSafeText(plan?.detail, '')}</p>
               </div>
             ))}
           </div>
@@ -248,7 +261,7 @@ export default function InsightsView({ submissions = [], user = null }) {
                     border: msg.role === 'user' ? 'none' : '1px solid var(--border-subtle)',
                   }}
                 >
-                  {msg.content}
+                  {renderSafeText(msg.content)}
                 </div>
                 {msg.role === 'user' && (
                   <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
