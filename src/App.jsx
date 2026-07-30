@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider, useToast } from './components/ToastNotification';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
@@ -280,8 +281,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppContent />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
