@@ -11,6 +11,7 @@ import {
   Github, 
   Bookmark,
   StickyNote,
+  CreditCard,
   Zap,
   Activity
 } from 'lucide-react';
@@ -34,6 +35,7 @@ export default function Sidebar({ activePage, onSelectPage, user, focusModeActiv
     { id: 'cohorts', label: 'Cohorts & Teams', icon: Users2 },
     { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
     { id: 'notes', label: 'Notes', icon: StickyNote },
+    { id: 'billing', label: 'Billing & Pro', icon: CreditCard },
   ];
 
   const userHandle = user ? user.handle : 'pdineshsampathram';
