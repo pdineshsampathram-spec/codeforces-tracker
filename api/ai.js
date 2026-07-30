@@ -4,10 +4,9 @@ import { db } from './db.js';
 dotenv.config();
 
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
-// Fast 8B model for sub-second responses on Nvidia NIM API
 const NVIDIA_MODEL = 'meta/llama-3.1-8b-instruct';
 
-async function callNvidiaApi(messages, timeoutMs = 4500) {
+async function callNvidiaApi(messages, timeoutMs = 6000) {
   if (!NVIDIA_API_KEY) {
     throw new Error('NVIDIA_API_KEY is not configured');
   }
@@ -25,8 +24,8 @@ async function callNvidiaApi(messages, timeoutMs = 4500) {
       body: JSON.stringify({
         model: NVIDIA_MODEL,
         messages,
-        temperature: 0.4,
-        max_tokens: 450,
+        temperature: 0.3,
+        max_tokens: 500,
       }),
       signal: controller.signal,
     });
@@ -46,10 +45,15 @@ async function callNvidiaApi(messages, timeoutMs = 4500) {
   }
 }
 
-// Build structured telemetry prompt from user's real solve history
-function assembleUserPrompt(handle, submissions) {
-  const okSubmissions = submissions.filter(s => s.verdict === 'OK' || s.verdict === 'Accepted');
-  const totalSolved = new Set(okSubmissions.map(s => `${s.contestId || s.contest_id}-${s.index || s.problem_index}`)).size;
+// Build accurate telemetry metrics from real user submissions
+function assembleUserPrompt(handle, inputSubmissions = []) {
+  let subs = Array.isArray(inputSubmissions) && inputSubmissions.length > 0 ? inputSubmissions : [];
+  if (subs.length === 0) {
+    subs = db.getStoredSubmissions(handle);
+  }
+
+  const okSubmissions = subs.filter(s => s.verdict === 'OK' || s.verdict === 'Accepted');
+  const uniqueSolved = new Set(okSubmissions.map(s => `${s.contestId || s.contest_id}-${s.index || s.problem_index}`)).size;
 
   const tagCounts = {};
   const okRatings = [];
@@ -58,7 +62,7 @@ function assembleUserPrompt(handle, submissions) {
     const rating = s.rating || s.problem?.rating || s.problem_rating;
     const tags = s.tags || s.problem?.tags || s.problem_tags || [];
 
-    if (rating) {
+    if (rating && typeof rating === 'number') {
       okRatings.push(rating);
     }
     tags.forEach(t => {
@@ -67,86 +71,109 @@ function assembleUserPrompt(handle, submissions) {
   });
 
   const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
-  const maxRating = okRatings.length > 0 ? Math.max(...okRatings) : 800;
+  const maxRating = okRatings.length > 0 ? Math.max(...okRatings) : 1000;
   const avgRating = okRatings.length > 0 ? Math.round(okRatings.reduce((a, b) => a + b, 0) / okRatings.length) : 800;
 
-  const totalSubmissions = submissions.length;
-  const passRate = totalSubmissions > 0 ? ((okSubmissions.length / totalSubmissions) * 100).toFixed(1) : 0;
+  const totalSubmissions = subs.length;
+  const passRate = totalSubmissions > 0 ? ((okSubmissions.length / totalSubmissions) * 100).toFixed(1) : '0.0';
+
+  const topTopicNames = sortedTags.slice(0, 4).map(([t]) => t.toUpperCase()).join(', ') || 'IMPLEMENTATION, MATH';
+  const topTopicsDetailed = sortedTags.slice(0, 4).map(([t, c]) => `${t} (${c} solved)`).join(', ') || 'Implementation, Math';
 
   return {
     handle,
     totalSubmissions,
-    totalSolved,
+    uniqueSolved,
     passRate,
     maxRating,
     avgRating,
-    topTags: sortedTags.slice(0, 4).map(([t, c]) => `${t} (${c})`).join(', '),
-    weakTags: sortedTags.slice(-3).map(([t]) => t).join(', '),
+    topTopicNames,
+    topTopicsDetailed,
   };
 }
 
-export async function generateAiDiagnostics(handle, submissions) {
+export async function generateAiDiagnostics(handle, submissions = []) {
   const stats = assembleUserPrompt(handle, submissions);
-  const nextRating = Math.min(2400, stats.maxRating + 100);
+  const nextTargetRating = Math.min(3000, stats.maxRating + 100);
 
-  const systemMessage = `You are a Competitive Programming Coach. Output ONLY JSON with keys: "strongestTopics", "nextTargetRating", "passRateSummary", "diagnosticSummary", "recommendedPlan".`;
+  const systemMessage = `You are an elite Competitive Programming Coach for Codeforces.
+Analyze the user's real solve metrics and return ONLY a single JSON object.
+JSON keys must be:
+- "strongestTopics": (string) e.g. "${stats.topTopicNames}"
+- "nextTargetRating": (number) e.g. ${nextTargetRating}
+- "passRateSummary": (string) e.g. "${stats.passRate}% pass rate across ${stats.totalSubmissions} submissions"
+- "diagnosticSummary": array of 3 objects, each with "title" (string) and "description" (string)
+- "recommendedPlan": array of 3 objects, each with "day" (string), "focus" (string), and "detail" (string)`;
 
-  const userMessage = `Handle: ${stats.handle}, Unique Solved: ${stats.totalSolved}, Pass Rate: ${stats.passRate}%, Max Rating: ${stats.maxRating}, Top Topics: ${stats.topTags || 'Greedy, Math'}. Output JSON.`;
+  const userMessage = `Handle: ${stats.handle}
+- Total Submissions: ${stats.totalSubmissions}
+- Unique Solved: ${stats.uniqueSolved}
+- Accuracy: ${stats.passRate}%
+- Max Rating Solved: ${stats.maxRating}
+- Avg Rating Solved: ${stats.avgRating}
+- Top Solved Topics: ${stats.topTopicsDetailed}
+
+Generate tailored JSON diagnostics for this handle.`;
 
   try {
     const rawResponse = await callNvidiaApi([
       { role: 'system', content: systemMessage },
       { role: 'user', content: userMessage },
-    ], 4500);
+    ], 6000);
 
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        strongestTopics: typeof parsed.strongestTopics === 'string' ? parsed.strongestTopics : stats.topTopicNames,
+        nextTargetRating: typeof parsed.nextTargetRating === 'number' ? parsed.nextTargetRating : nextTargetRating,
+        passRateSummary: typeof parsed.passRateSummary === 'string' ? parsed.passRateSummary : `${stats.passRate}% pass rate across ${stats.totalSubmissions} total submissions`,
+        diagnosticSummary: Array.isArray(parsed.diagnosticSummary) ? parsed.diagnosticSummary : [],
+        recommendedPlan: Array.isArray(parsed.recommendedPlan) ? parsed.recommendedPlan : [],
+      };
     }
-    return JSON.parse(rawResponse);
   } catch (err) {
-    console.error('Nvidia AI API Error/Timeout, returning instant real telemetry diagnostic:', err.message);
-
-    // Instant fallback calculated directly from user's real solve metrics
-    return {
-      strongestTopics: stats.topTags ? stats.topTags.split(',')[0] : 'Implementation & Math',
-      nextTargetRating: nextRating,
-      passRateSummary: `${stats.passRate}% AC accuracy across ${stats.totalSubmissions} total submissions`,
-      diagnosticSummary: [
-        {
-          title: `High Efficiency up to ${stats.maxRating} Rating`,
-          description: `You have successfully solved ${stats.totalSolved} unique problems up to ${stats.maxRating} difficulty. Your top topic areas are ${stats.topTags || 'Implementation'}.`
-        },
-        {
-          title: `Target Rating Bracket: ${stats.avgRating} - ${nextRating}`,
-          description: `To maximize rating growth, focus your daily practice on problems in the ${nextRating} difficulty range.`
-        },
-        {
-          title: 'Topic Expansion & Contest Readiness',
-          description: 'Incorporate more Dynamic Programming, Graph Algorithms, and Data Structure problems into your weekly practice routines.'
-        }
-      ],
-      recommendedPlan: [
-        { day: 'Day 1-2', focus: 'Core Strengths', detail: `Solve 3-4 problems in ${stats.topTags || 'Math & Greedy'} at rating ${stats.avgRating}.` },
-        { day: 'Day 3-4', focus: 'Target Rating Push', detail: `Attempt 2-3 problems rated ${nextRating} to build contest endurance.` },
-        { day: 'Day 5-7', focus: 'Weakness Rectification', detail: 'Practice DP and Data Structure problems with a 45-minute timer enabled.' }
-      ],
-      provider: 'Nvidia AI Telemetry Engine'
-    };
+    console.error('Nvidia AI API Error, generating telemetry diagnostic report:', err.message);
   }
+
+  // Pure data-backed telemetry report calculated directly from the user's real stats
+  return {
+    strongestTopics: stats.topTopicNames,
+    nextTargetRating: nextTargetRating,
+    passRateSummary: `${stats.passRate}% pass rate across ${stats.totalSubmissions} total submissions`,
+    diagnosticSummary: [
+      {
+        title: `High Solve Volume in ${stats.topTopicNames}`,
+        description: `${stats.handle} has successfully solved ${stats.uniqueSolved} unique problems with a max rating of ${stats.maxRating}. Most solved topics are ${stats.topTopicsDetailed}.`
+      },
+      {
+        title: `Optimal Rating Push Target: ${nextTargetRating}`,
+        description: `Your average solved rating is ${stats.avgRating}. To push your Codeforces rating to the next rank tier, focus daily practice on problems rated ${nextTargetRating}.`
+      },
+      {
+        title: 'Accuracy & Speed Tuning',
+        description: `Current submission accuracy is ${stats.passRate}% across ${stats.totalSubmissions} attempts. Practice solving target problems under a 45-minute contest timer.`
+      }
+    ],
+    recommendedPlan: [
+      { day: 'Day 1-2', focus: 'Strengthen Top Topics', detail: `Solve 3-4 problems in ${stats.topTopicNames} rated ${stats.avgRating}.` },
+      { day: 'Day 3-4', focus: `Push Target ${nextTargetRating}`, detail: `Attempt 2-3 problems rated ${nextTargetRating} to build rating confidence.` },
+      { day: 'Day 5-7', focus: 'Weak Topic Expansion', detail: 'Practice Dynamic Programming and Data Structures under timed contest conditions.' }
+    ]
+  };
 }
 
-export async function askAiAssistant(handle, submissions, userQuestion) {
+export async function askAiAssistant(handle, submissions = [], userQuestion = '') {
   const stats = assembleUserPrompt(handle, submissions);
 
-  const systemMessage = `You are an expert competitive programming mentor. Keep answers under 3 sentences, actionable, tailored to Codeforces handle ${handle} (Max rating solved: ${stats.maxRating}, Solved: ${stats.totalSolved}).`;
+  const systemMessage = `You are CodeforcesPro AI Assistant, an expert competitive programming coach. Answer directly in under 3 concise sentences for handle ${handle} (Max Rating Solved: ${stats.maxRating}, Total Solved: ${stats.uniqueSolved}, Top Topics: ${stats.topTopicNames}).`;
 
   try {
     return await callNvidiaApi([
       { role: 'system', content: systemMessage },
       { role: 'user', content: userQuestion },
-    ], 4500);
+    ], 6000);
   } catch (err) {
-    return `Based on your telemetry for **${handle}** (Max rating solved: ${stats.maxRating}, Total unique solved: ${stats.totalSolved}): For your next practice session, target problems rated **${stats.maxRating + 100}** in topics like Greedy, Math, and Dynamic Programming.`;
+    return `Based on telemetry for **${handle}** (Max rating solved: ${stats.maxRating}, Total solved: ${stats.uniqueSolved}, Top topics: ${stats.topTopicNames}): For your next practice session, target problems rated **${stats.maxRating + 100}** in ${stats.topTopicNames}.`;
   }
 }

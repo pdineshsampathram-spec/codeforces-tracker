@@ -72,7 +72,7 @@ export default function InsightsView({ submissions = [], user = null }) {
 
   useEffect(() => {
     fetchAiInsights();
-  }, [userHandle]);
+  }, [userHandle, safeSubmissions.length]);
 
   const handleSendQuestion = async (e) => {
     e.preventDefault();
