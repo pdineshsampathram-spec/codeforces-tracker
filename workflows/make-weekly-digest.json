@@ -1,0 +1,70 @@
+{
+  "name": "CodeforcesPro — Make.com Weekly Progress Digest",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomTrigger",
+      "version": 1,
+      "parameters": {
+        "scheduling": {
+          "type": "cron",
+          "cron": "0 18 * * 0"
+        }
+      },
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0
+        },
+        "label": "Sunday 6 PM Schedule"
+      }
+    },
+    {
+      "id": 2,
+      "module": "http:ActionMakeRequest",
+      "version": 3,
+      "parameters": {
+        "url": "https://codeforces-tracker-nine.vercel.app/api/automation/weekly-summary/pdineshsampathram",
+        "method": "GET",
+        "headers": [
+          {
+            "name": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0
+        },
+        "label": "Fetch Weekly Summary"
+      }
+    },
+    {
+      "id": 3,
+      "module": "http:ActionMakeRequest",
+      "version": 3,
+      "parameters": {
+        "url": "https://codeforces-tracker-nine.vercel.app/api/automation/send-alert",
+        "method": "POST",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "body": "{\n  \"title\": \"📊 Weekly CP Progress Report\",\n  \"message\": \"{{2.digestMessage}}\"\n}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 600,
+          "y": 0
+        },
+        "label": "Dispatch Weekly Digest Alert"
+      }
+    }
+  ]
+}

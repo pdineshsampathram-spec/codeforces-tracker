@@ -1,0 +1,70 @@
+{
+  "name": "CodeforcesPro — Make.com Streak At Risk Reminder",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomTrigger",
+      "version": 1,
+      "parameters": {
+        "scheduling": {
+          "type": "cron",
+          "cron": "0 20 * * *"
+        }
+      },
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0
+        },
+        "label": "Daily 8 PM Schedule"
+      }
+    },
+    {
+      "id": 2,
+      "module": "http:ActionMakeRequest",
+      "version": 3,
+      "parameters": {
+        "url": "https://codeforces-tracker-nine.vercel.app/api/automation/users-at-risk",
+        "method": "GET",
+        "headers": [
+          {
+            "name": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0
+        },
+        "label": "Fetch Users At Risk"
+      }
+    },
+    {
+      "id": 3,
+      "module": "http:ActionMakeRequest",
+      "version": 3,
+      "parameters": {
+        "url": "https://codeforces-tracker-nine.vercel.app/api/automation/send-alert",
+        "method": "POST",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "body": "{\n  \"title\": \"🔥 Streak At Risk Alert\",\n  \"message\": \"Attention {{1.usersAtRisk[].handle}}: You haven't solved a problem on Codeforces in 20+ hours! Solve 1 problem today to keep your streak alive.\"\n}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 600,
+          "y": 0
+        },
+        "label": "Dispatch Alert"
+      }
+    }
+  ]
+}

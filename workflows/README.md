@@ -1,43 +1,29 @@
-# CodeforcesPro Automation Engineering (n8n Integration)
+# CodeforcesPro Automation Engineering (Make.com & n8n Workflows)
 
-CodeforcesPro uses **n8n** as its operational workflow automation engine to manage background notifications, streak reminders, and weekly progress digests without bloating the core application codebase.
-
----
-
-## Architecture Overview
-
-Instead of exposing direct database credentials, CodeforcesPro exposes clean, authenticated REST automation API endpoints (`/api/automation/*`). n8n workflows consume these endpoints via scheduled Cron triggers and dispatch alerts to Discord, Email, or Webhook channels.
-
-```
-[ n8n Schedule Trigger ] ---> [ GET /api/automation/users-at-risk ]
-                                            |
-                                  (Finds streak at risk)
-                                            |
-                                            v
-[ Discord / Email Alert ] <--- [ POST /api/automation/send-alert ]
-```
+CodeforcesPro uses REST automation webhooks as its operational workflow automation backbone to manage background notifications, streak reminders, and weekly progress digests without bloating the core application codebase.
 
 ---
 
-## Production Workflows Included
+## 🧩 Make.com Scenario Setup Guide
 
-### 1. `workflows/streak-reminder.json`
-- **Trigger**: Daily at 8:00 PM UTC (`0 20 * * *`).
-- **Endpoint**: `GET /api/automation/users-at-risk`
-- **Logic**: Identifies users who have an active streak but have not solved any problem in the last 20+ hours.
-- **Action**: Dispatches a high-priority "🔥 Streak At Risk" alert so the user can complete 1 problem before midnight.
-
-### 2. `workflows/weekly-digest.json`
-- **Trigger**: Every Sunday at 6:00 PM UTC (`0 18 * * 0`).
-- **Endpoint**: `GET /api/automation/weekly-summary/:handle`
-- **Logic**: Aggregates the last 7 days of submissions, unique solved counts, max rating achieved, and daily breakdown.
-- **Action**: Dispatches a formatted "📊 Weekly CP Progress Report" summary digest.
+### Available Make.com Blueprints:
+1. 📄 **`workflows/make-streak-reminder.json`** — Nightly Streak-at-Risk Notification Scenario.
+2. 📄 **`workflows/make-weekly-digest.json`** — Sunday Weekly Progress Digest Scenario.
 
 ---
 
-## How to Import Workflows into n8n
+### How to Import Blueprints into Make.com (Integromat)
 
-1. Open your n8n dashboard (Cloud or self-hosted).
-2. Click **Workflows > Import from File**.
-3. Select `workflows/streak-reminder.json` or `workflows/weekly-digest.json`.
-4. Click **Activate Workflow**.
+1. Log in to **[Make.com](https://make.com)** and click **Create a new scenario**.
+2. Click the **`...` (More)** menu at the bottom toolbar → Select **Import Blueprint**.
+3. Choose `workflows/make-streak-reminder.json` or `workflows/make-weekly-digest.json`.
+4. Click **Save** and turn the Scenario ON!
+
+---
+
+## 🛠️ API Webhook Endpoints Used by Make.com
+
+- **Check Streak Risk**: `GET https://codeforces-tracker-nine.vercel.app/api/automation/users-at-risk`
+- **Get Weekly Digest**: `GET https://codeforces-tracker-nine.vercel.app/api/automation/weekly-summary/pdineshsampathram`
+- **Get Contest Alerts**: `GET https://codeforces-tracker-nine.vercel.app/api/automation/upcoming-contest-alerts`
+- **Send Notification**: `POST https://codeforces-tracker-nine.vercel.app/api/automation/send-alert`
