@@ -20,6 +20,7 @@ import ProgressView from './components/ProgressView';
 import BookmarksView from './components/BookmarksView';
 import NotesView from './components/NotesView';
 import CohortsView from './components/CohortsView';
+import RoadmapView from './components/RoadmapView';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import { AlertCircle } from 'lucide-react';
 
@@ -133,6 +134,7 @@ function AppContent() {
       case 'bookmarks': return 'Problem Bookmarks';
       case 'notes': return 'Problem Notes';
       case 'cohorts': return 'Cohorts & Teams';
+      case 'roadmap': return 'Personalized Roadmap';
       default: return 'Dashboard';
     }
   };
@@ -270,6 +272,11 @@ function AppContent() {
               {/* PAGE 11: COHORTS & TEAMS */}
               {activePage === 'cohorts' && (
                 <CohortsView activeHandle={handle} />
+              )}
+
+              {/* PAGE 12: ROADMAP */}
+              {activePage === 'roadmap' && (
+                <RoadmapView submissions={data.submissions} user={data.user} ratingHistory={data.ratingHistory} />
               )}
             </div>
           ) : null}

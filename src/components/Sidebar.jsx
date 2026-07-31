@@ -13,7 +13,8 @@ import {
   StickyNote,
   CreditCard,
   Zap,
-  Activity
+  Activity,
+  Map
 } from 'lucide-react';
 
 export default function Sidebar({ activePage, onSelectPage, user, focusModeActive, onToggleFocus }) {
@@ -29,6 +30,7 @@ export default function Sidebar({ activePage, onSelectPage, user, focusModeActiv
     { id: 'insights', label: 'Insights & AI', icon: Sparkles },
     { id: 'compare', label: 'Compare Users', icon: Users2 },
     { id: 'progress', label: 'Progress & Goals', icon: Target },
+    { id: 'roadmap', label: 'Roadmap', icon: Map },
   ];
 
   const workspaceNav = [

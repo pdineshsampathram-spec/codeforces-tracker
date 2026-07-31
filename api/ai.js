@@ -302,3 +302,87 @@ When answering or recommending problems, ALWAYS recommend official problems with
     return `Based on telemetry for **${handle}** (Max rating solved: ${stats.maxRating}, Total solved: ${stats.uniqueSolved}):\n\nI recommend solving **[${p1.id} - ${p1.name}](${p1.url})** (Rating: ${p1.rating}, ${p1.contest}). It matches your target difficulty of ${stats.targetRating}!`;
   }
 }
+
+export async function generateAiRoadmap(handle, submissions = [], ratingHistory = [], user = null, targetRating = 1400) {
+  const stats = await assembleUserPrompt(handle, submissions);
+
+  // Compute additional real metrics from ratingHistory
+  const ratings = Array.isArray(ratingHistory) ? ratingHistory : [];
+  const currentRating = user?.rating || (ratings.length > 0 ? ratings[ratings.length - 1]?.newRating : 0);
+  const contestCount = ratings.length;
+  const ratingChanges = ratings.map(r => r.newRating - r.oldRating);
+  const positiveContests = ratingChanges.filter(c => c > 0).length;
+  const contestWinRate = contestCount > 0 ? ((positiveContests / contestCount) * 100).toFixed(1) : '0';
+  const recentContests = ratings.slice(-5);
+  const recentTrend = recentContests.length > 0
+    ? Math.round(recentContests.map(r => r.newRating - r.oldRating).reduce((a, b) => a + b, 0) / recentContests.length)
+    : 0;
+
+  // Compute tag distribution for weak tag identification
+  const okSubs = (Array.isArray(submissions) ? submissions : []).filter(s => s.verdict === 'OK' || s.verdict === 'Accepted');
+  const tagCounts = {};
+  const solvedKeys = new Set();
+  okSubs.forEach(s => {
+    const cid = s.problem?.contestId || s.contestId || s.contest_id;
+    const idx = s.problem?.index || s.index || s.problem_index;
+    const key = `${cid}${idx}`;
+    if (!solvedKeys.has(key)) {
+      solvedKeys.add(key);
+      const tags = s.problem?.tags || s.tags || s.problem_tags || [];
+      tags.forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; });
+    }
+  });
+
+  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+  const strongTags = sortedTags.slice(0, 5).map(([t, c]) => `${t} (${c})`).join(', ');
+  const weakTags = sortedTags.slice(-5).map(([t, c]) => `${t} (${c})`).join(', ');
+
+  const systemMessage = `You are an expert Competitive Programming Mentor. You have access to real Codeforces telemetry data. Write personalized coaching content.
+Return ONLY a JSON object with these keys:
+- "assessment": (string) 2-3 paragraph personalized assessment of the user's strengths, weaknesses, and growth trajectory. Be specific — reference their actual numbers.
+- "motivation": (string) 2-3 paragraph encouraging feedback based on their real data. Never use generic motivational quotes. Reference their actual stats and progress.`;
+
+  const userMessage = `Real Codeforces Profile Data for ${handle}:
+- Current Rating: ${currentRating || 'Unrated'}
+- Max Rating: ${user?.maxRating || stats.maxRating}
+- Rank: ${user?.rank || 'Unrated'}
+- Total Submissions: ${stats.totalSubmissions}
+- Unique Problems Solved: ${stats.uniqueSolved}
+- Acceptance Rate: ${stats.passRate}%
+- Max Problem Rating Solved: ${stats.maxRating}
+- Avg Problem Rating Solved: ${stats.avgRating}
+- Rated Contests: ${contestCount}
+- Contest Win Rate: ${contestWinRate}%
+- Recent Trend (last 5 contests): avg ${recentTrend > 0 ? '+' : ''}${recentTrend} per contest
+- Strongest Topics: ${strongTags || 'N/A'}
+- Weakest Topics: ${weakTags || 'N/A'}
+- Target Rating: ${targetRating}
+
+Generate personalized assessment and motivation based ONLY on this real data.`;
+
+  try {
+    const rawResponse = await callNvidiaApi([
+      { role: 'system', content: systemMessage },
+      { role: 'user', content: userMessage },
+    ], 8000);
+
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        assessment: typeof parsed.assessment === 'string' ? parsed.assessment : '',
+        motivation: typeof parsed.motivation === 'string' ? parsed.motivation : '',
+      };
+    }
+  } catch (err) {
+    if (err.rateLimited) throw err;
+    console.error('Roadmap AI Error, using deterministic fallback:', err.message);
+  }
+
+  // Deterministic fallback using real stats
+  const delta = targetRating - (currentRating || 0);
+  return {
+    assessment: `${handle} has solved ${stats.uniqueSolved} unique problems with a ${stats.passRate}% acceptance rate and participated in ${contestCount} rated contests. The strongest areas are ${strongTags || 'implementation, math'}, with an average solved difficulty of ${stats.avgRating}. ${delta > 0 ? `To reach the target of ${targetRating}, a focused ${Math.ceil(delta / 50)}-week training plan is recommended, gradually increasing problem difficulty from ${stats.avgRating} to ${targetRating}.` : 'Current performance is already at or above the target — consider setting a higher goal.'}${contestCount > 0 ? ` Contest win rate is ${contestWinRate}%, with a recent trend of ${recentTrend > 0 ? '+' : ''}${recentTrend} per contest.` : ' No rated contests yet — participating in contests is critical for rating growth.'}`,
+    motivation: `With ${stats.uniqueSolved} problems solved across ${stats.totalSubmissions} submissions, ${handle} has built a solid foundation in competitive programming. ${currentRating > 0 ? `The current rating of ${currentRating} reflects genuine skill, and the path to ${targetRating} is a matter of consistent, targeted practice.` : 'Getting rated through contest participation is the next important milestone.'} ${positiveContests > 0 ? `Winning ${positiveContests} out of ${contestCount} contests shows the ability to perform under pressure.` : 'Each new contest is an opportunity to learn and grow.'} The key to the next level is focusing on weaker topics (${weakTags || 'explore new areas'}) while maintaining strength in familiar ones. Every problem solved at ${Math.min(3500, stats.avgRating + 100)}+ rating brings you closer to the goal.`,
+  };
+}

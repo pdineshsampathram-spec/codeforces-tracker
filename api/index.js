@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { db } from './db.js';
-import { generateAiDiagnostics, askAiAssistant } from './ai.js';
+import { generateAiDiagnostics, askAiAssistant, generateAiRoadmap } from './ai.js';
 import { setupAuthAndCohortRoutes } from './auth.js';
 import { setupAutomationRoutes } from './automation.js';
 import { generateSvgBadge } from './badge.js';
@@ -230,7 +230,28 @@ app.post('/api/ai/chat', async (req, res) => {
   }
 });
 
-// 3d. Embeddable SVG Badge Endpoint (For GitHub READMEs)
+// 3d. AI Roadmap Generation Endpoint
+app.post('/api/ai/roadmap', async (req, res) => {
+  try {
+    const { handle, submissions = [], ratingHistory = [], user = null, targetRating = 1400 } = req.body;
+    if (!handle) return res.status(400).json({ success: false, error: 'Handle required' });
+    const result = await generateAiRoadmap(handle, submissions, ratingHistory, user, targetRating);
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    if (err.rateLimited) {
+      return res.status(429).json({
+        success: false,
+        rateLimited: true,
+        error: err.message,
+        resetTime: err.resetTime,
+        remainingSeconds: err.remainingSeconds,
+      });
+    }
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3e. Embeddable SVG Badge Endpoint (For GitHub READMEs)
 app.get('/api/badge/:handle.svg', async (req, res) => {
   let { handle } = req.params;
   handle = handle.replace(/\.svg$/, '');
