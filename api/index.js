@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { db } from './db.js';
-import { generateAiDiagnostics, askAiAssistant, generateAiRoadmap } from './ai.js';
+import { generateAiDiagnostics, askAiAssistant, generateAiRoadmap, fetchLiveProblemset } from './ai.js';
 import { setupAuthAndCohortRoutes } from './auth.js';
 import { setupAutomationRoutes } from './automation.js';
 import { generateSvgBadge } from './badge.js';
@@ -284,6 +284,19 @@ app.get('/api/user-aggregated/:handle', async (req, res) => {
   const { handle } = req.params;
   const aggregated = await getAggregatedUserStats(handle);
   return res.json({ success: true, data: aggregated });
+});
+
+// 3f. Live Codeforces Problemset Endpoint
+app.get('/api/problemset', async (req, res) => {
+  try {
+    const problems = await fetchLiveProblemset();
+    if (!problems || problems.length === 0) {
+      return res.status(503).json({ success: false, error: 'Unable to retrieve official Codeforces problems. Please synchronize the problemset API before generating the roadmap.' });
+    }
+    return res.json({ success: true, data: problems });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'Unable to retrieve official Codeforces problems. Please synchronize the problemset API before generating the roadmap.' });
+  }
 });
 
 // 4. Upcoming Contests Endpoint

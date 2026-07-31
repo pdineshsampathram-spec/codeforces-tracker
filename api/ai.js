@@ -57,7 +57,7 @@ const FALLBACK_CF_PROBLEMS = [
 let cachedLiveProblemset = null;
 let lastProblemsetFetch = 0;
 
-async function fetchLiveProblemset() {
+export async function fetchLiveProblemset() {
   const now = Date.now();
   if (cachedLiveProblemset && now - lastProblemsetFetch < 3600 * 1000) {
     return cachedLiveProblemset;
